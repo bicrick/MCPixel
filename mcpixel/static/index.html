@@ -1,13 +1,23 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="forest">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MCPixel</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/css/tokens.css" />
+  <link rel="stylesheet" href="/static/css/themes/forest.css" />
+  <link rel="stylesheet" href="/static/css/themes/ink.css" />
+  <link rel="stylesheet" href="/static/css/base.css" />
+  <link rel="stylesheet" href="/static/css/components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=Outfit:wght@500;700&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Pixelify+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    (function () {
+      var t = localStorage.getItem("mcpixel-theme");
+      if (t === "ink" || t === "forest") document.documentElement.dataset.theme = t;
+    })();
+  </script>
 </head>
 <body>
   <div class="app">
@@ -16,9 +26,15 @@
         <span class="brand">MCPixel</span>
         <span class="topbar-tag">Local pixel suite</span>
       </div>
-      <div class="topbar-health" id="healthBar" aria-live="polite">
-        <span class="health-dot" id="healthDot" data-state="unknown"></span>
-        <span id="healthLabel">Checking…</span>
+      <div class="topbar-right">
+        <div class="theme-switch" role="group" aria-label="Theme">
+          <button type="button" data-theme="forest" class="active">Forest</button>
+          <button type="button" data-theme="ink">Ink</button>
+        </div>
+        <div class="topbar-health" id="healthBar" aria-live="polite">
+          <span class="health-dot" id="healthDot" data-state="unknown"></span>
+          <span id="healthLabel">Checking…</span>
+        </div>
       </div>
     </header>
 
@@ -36,6 +52,28 @@
             Prompt
             <textarea id="prompt" rows="4" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
           </label>
+          <div class="size-row">
+            <span>Target size (prompt hint)</span>
+            <div class="chip-row" id="sizeChips">
+              <button type="button" class="size-chip" data-size="16">16</button>
+              <button type="button" class="size-chip" data-size="32">32</button>
+              <button type="button" class="size-chip" data-size="48">48</button>
+              <button type="button" class="size-chip active" data-size="64">64</button>
+              <button type="button" class="size-chip" data-size="custom">Custom</button>
+              <button type="button" class="size-chip" data-size="none">None</button>
+            </div>
+            <div class="custom-size" id="customSize" hidden>
+              <input id="customW" type="number" min="1" max="1024" placeholder="W" />
+              <span>×</span>
+              <input id="customH" type="number" min="1" max="1024" placeholder="H" />
+            </div>
+          </div>
+          <div class="k-row">
+            <label>
+              Colors (k)
+              <input id="kColors" type="number" min="2" max="64" value="16" />
+            </label>
+          </div>
           <div class="actions create-actions">
             <button id="generateBtn" type="button">Generate</button>
             <label class="file-btn">
@@ -46,10 +84,6 @@
           <details class="advanced">
             <summary>Advanced</summary>
             <div class="row">
-              <label>
-                Colors (k)
-                <input id="kColors" type="number" min="2" max="64" value="16" />
-              </label>
               <label>
                 Pixel size
                 <input id="pixelSize" type="number" min="1" step="1" placeholder="auto" />
@@ -73,7 +107,10 @@
 
         <section class="rail-section queue-pane" data-pane="queue">
           <div class="queue-head">
-            <h2>Queue</h2>
+            <div class="queue-head-row">
+              <h2>Queue</h2>
+              <button type="button" id="clearFailedBtn" class="clear-failed-btn" hidden>Clear failed</button>
+            </div>
             <div class="queue-filters" role="group" aria-label="Filter jobs">
               <button type="button" class="filter-btn active" data-filter="all">All</button>
               <button type="button" class="filter-btn" data-filter="active">Active</button>
@@ -154,6 +191,6 @@
     </div>
   </div>
 
-  <script src="/static/app.js"></script>
+  <script type="module" src="/static/app.js"></script>
 </body>
 </html>

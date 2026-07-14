@@ -1,0 +1,24 @@
+/* Shared design tokens — themes override colors only */
+:root {
+  --bg0: #0f1410;
+  --bg1: #182018;
+  --bg2: #223024;
+  --ink: #e8f0e6;
+  --muted: #9bb09a;
+  --accent: #3d9b5f;
+  --accent-2: #c4a35a;
+  --danger: #c45c4a;
+  --line: #2c3c30;
+  --cta: var(--accent);
+  --cta-ink: #07140c;
+  --radius: 0;
+  --rail-width: 320px;
+  --topbar-h: 48px;
+  --font-ui: "IBM Plex Mono", ui-monospace, monospace;
+  --font-display: "Pixelify Sans", "IBM Plex Mono", monospace;
+  --checker:
+    linear-gradient(45deg, #2a2a2a 25%, transparent 25%),
+    linear-gradient(-45deg, #2a2a2a 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #2a2a2a 75%),
+    linear-gradient(-45deg, transparent 75%, #2a2a2a 75%);
+}

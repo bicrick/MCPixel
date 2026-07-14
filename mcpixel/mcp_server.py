@@ -117,6 +117,16 @@ def resnap(
         return r.json()
 
 
+@mcp.tool()
+def delete_job(job_id: str) -> dict[str, Any]:
+    """Permanently delete a job and its stage images from local disk."""
+    _check_health()
+    with _client() as client:
+        r = client.delete(f"/v1/jobs/{job_id}")
+        r.raise_for_status()
+        return r.json()
+
+
 def main() -> None:
     mcp.run(transport="stdio")
 

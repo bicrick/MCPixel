@@ -1,0 +1,13 @@
+html[data-theme="forest"] {
+  --bg0: #0f1410;
+  --bg1: #182018;
+  --bg2: #223024;
+  --ink: #e8f0e6;
+  --muted: #9bb09a;
+  --accent: #3d9b5f;
+  --accent-2: #c4a35a;
+  --danger: #c45c4a;
+  --line: #2c3c30;
+  --cta: var(--accent);
+  --cta-ink: #07140c;
+}

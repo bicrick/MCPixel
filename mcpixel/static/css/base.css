@@ -1,0 +1,80 @@
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, var(--accent-2) 18%, transparent) 0%, transparent 50%),
+    var(--bg0);
+  overflow: hidden;
+}
+
+h1, h2, .brand, .empty-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+h2 {
+  margin: 0 0 0.75rem;
+  font-size: 0.95rem;
+}
+
+label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-bottom: 0.65rem;
+}
+
+textarea, input, select {
+  font: inherit;
+  font-family: var(--font-ui);
+  color: var(--ink);
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.55rem 0.65rem;
+}
+
+textarea { resize: vertical; min-height: 5rem; }
+
+button, .file-btn, .download-btn {
+  appearance: none;
+  border: 1px solid transparent;
+  background: var(--cta);
+  color: var(--cta-ink);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  padding: 0.55rem 0.85rem;
+  border-radius: var(--radius);
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.8rem;
+}
+
+button.secondary, .tool, .file-btn, .download-btn {
+  background: var(--bg2);
+  color: var(--ink);
+  border-color: var(--line);
+}
+
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+a { color: inherit; }
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}

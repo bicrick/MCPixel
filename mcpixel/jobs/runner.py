@@ -32,13 +32,25 @@ class JobRunner:
         self.store = store
         self.providers = providers
 
-    def wrap_prompt(self, prompt: str, wrap: bool) -> str:
+    def wrap_prompt(
+        self,
+        prompt: str,
+        wrap: bool,
+        target_width: int | None = None,
+        target_height: int | None = None,
+    ) -> str:
+        text = prompt.strip()
+        if target_width and target_height:
+            text = (
+                f"{text}\n\nTarget sprite roughly {target_width}x{target_height} pixels, "
+                "single centered subject, clear silhouette, game asset framing."
+            )
         if not wrap:
-            return prompt
+            return text
         suffix = self.settings.default_prompt_suffix.strip()
         if not suffix:
-            return prompt
-        return f"{prompt.strip()}\n\n{suffix}"
+            return text
+        return f"{text}\n\n{suffix}"
 
     def start_generate(self, req: GenerateRequest) -> JobRecord:
         job_id = self.store.new_id()
@@ -47,11 +59,18 @@ class JobRunner:
             id=job_id,
             status=JobStatus.queued,
             prompt=req.prompt,
-            wrapped_prompt=self.wrap_prompt(req.prompt, req.wrap_prompt),
+            wrapped_prompt=self.wrap_prompt(
+                req.prompt,
+                req.wrap_prompt,
+                target_width=req.target_width,
+                target_height=req.target_height,
+            ),
             provider=req.provider,
             k_colors=req.k_colors,
             pixel_size=req.pixel_size,
             bg_provider=bg,
+            target_width=req.target_width,
+            target_height=req.target_height,
         )
         return self.store.create(record)
 

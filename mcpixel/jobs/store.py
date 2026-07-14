@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import shutil
 import uuid
 from pathlib import Path
 
@@ -82,3 +82,17 @@ class JobStore:
         path = self.stage_path(job_id, stage)
         path.write_bytes(data)
         return path
+
+    def delete(self, job_id: str) -> bool:
+        job_dir = self._job_dir(job_id)
+        if not job_dir.exists():
+            return False
+        shutil.rmtree(job_dir)
+        return True
+
+    def clear_failed(self) -> int:
+        removed = 0
+        for job in self.list_jobs(limit=10_000):
+            if job.status == JobStatus.failed and self.delete(job.id):
+                removed += 1
+        return removed

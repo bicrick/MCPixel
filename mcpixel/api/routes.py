@@ -80,6 +80,20 @@ def get_job(job_id: str, request: Request) -> dict:
     return enrich(job, _settings(request).public_base_url)
 
 
+@router.delete("/jobs/{job_id}")
+def delete_job(job_id: str, request: Request) -> dict:
+    deleted = _store(request).delete(job_id)
+    if not deleted:
+        raise HTTPException(404, "Job not found")
+    return {"ok": True, "id": job_id}
+
+
+@router.post("/jobs/clear-failed")
+def clear_failed_jobs(request: Request) -> dict:
+    removed = _store(request).clear_failed()
+    return {"ok": True, "removed": removed}
+
+
 @router.get("/jobs/{job_id}/stages/{stage}")
 def get_stage(job_id: str, stage: str, request: Request) -> FileResponse:
     if stage not in {"raw", "cutout", "snapped", "edited"}:

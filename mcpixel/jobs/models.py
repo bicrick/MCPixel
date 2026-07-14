@@ -34,6 +34,8 @@ class GenerateRequest(BaseModel):
     bg_provider: BgProvider = BgProvider.rembg_birefnet
     wrap_prompt: bool = True
     skip_bg_remove: bool = False
+    target_width: int | None = Field(default=None, ge=1, le=1024)
+    target_height: int | None = Field(default=None, ge=1, le=1024)
 
 
 class ResnapRequest(BaseModel):
@@ -50,6 +52,8 @@ class JobRecord(BaseModel):
     k_colors: int = 16
     pixel_size: float | None = None
     bg_provider: BgProvider = BgProvider.rembg_birefnet
+    target_width: int | None = None
+    target_height: int | None = None
     error: str | None = None
     stage_error: str | None = None
     detected_pixel_size: float | None = None
