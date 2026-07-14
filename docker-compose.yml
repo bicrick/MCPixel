@@ -1,0 +1,19 @@
+services:
+  mcpixel:
+    build: .
+    ports:
+      - "8787:8787"
+    env_file:
+      - .env
+    environment:
+      HOST: "0.0.0.0"
+      PUBLIC_BASE_URL: "http://127.0.0.1:8787"
+      SNAPPER_BIN: "/usr/local/bin/spritefusion-pixel-snapper"
+      DATA_DIR: "/app/data"
+    volumes:
+      - ./data:/app/data
+      - rembg-models:/root/.u2net
+    restart: unless-stopped
+
+volumes:
+  rembg-models:
