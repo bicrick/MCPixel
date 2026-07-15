@@ -56,7 +56,7 @@ export const state = {
   jobsById: new Map(),
   projects: [],
   activeProjectId: null, // null = list; "unfiled" | project id when drilled in
-  queueFilter: "queued",
+  queueFilter: "all",
   pollTimer: null,
   toastTimer: null,
   targetMode: "64",
