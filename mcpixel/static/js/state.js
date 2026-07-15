@@ -26,7 +26,11 @@ export const SIZE_PRESETS = [16, 32, 48, 64];
 
 export const state = {
   currentJobId: null,
+  mainMode: "empty", // empty | create | job
+  railTab: "queue", // queue | projects
   jobsById: new Map(),
+  projects: [],
+  activeProjectId: null, // null = list; "unfiled" | project id when drilled in
   queueFilter: "all",
   pollTimer: null,
   toastTimer: null,
@@ -34,6 +38,7 @@ export const state = {
   targetWidth: 64,
   targetHeight: 64,
   menuJobId: null,
+  menuMode: "job", // job | project-pick
 };
 
 export function $(id) {
@@ -118,15 +123,40 @@ export function setMobileTab(tab) {
   });
 }
 
-export function applyTheme(theme) {
-  const next = theme === "ink" ? "ink" : "forest";
-  document.documentElement.dataset.theme = next;
-  localStorage.setItem("mcpixel-theme", next);
-  document.querySelectorAll(".theme-switch button").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.theme === next);
-  });
+export function setMainMode(mode) {
+  state.mainMode = mode;
+  const app = document.querySelector(".app");
+  if (app) app.dataset.main = mode;
+  const empty = $("emptyState");
+  const create = $("createView");
+  const inspect = $("inspect");
+  if (empty) empty.hidden = mode !== "empty";
+  if (create) create.hidden = mode !== "create";
+  if (inspect) inspect.hidden = mode !== "job";
 }
 
-export function initTheme() {
-  applyTheme(localStorage.getItem("mcpixel-theme") || "forest");
+export function setRailTab(tab) {
+  state.railTab = tab;
+  const app = document.querySelector(".app");
+  if (app) app.dataset.railTab = tab;
+  document.querySelectorAll(".rail-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.rail === tab);
+  });
+  const queuePane = document.querySelector(".queue-pane");
+  const projectsPane = document.querySelector(".projects-pane");
+  if (queuePane) queuePane.hidden = tab !== "queue";
+  if (projectsPane) projectsPane.hidden = tab !== "projects";
+}
+
+export function filedJobIds() {
+  const ids = new Set();
+  for (const p of state.projects) {
+    for (const id of p.job_ids || []) ids.add(id);
+  }
+  return ids;
+}
+
+export function unfiledJobs() {
+  const filed = filedJobIds();
+  return sortedJobs().filter((j) => !filed.has(j.id));
 }

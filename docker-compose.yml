@@ -10,9 +10,25 @@ services:
       PUBLIC_BASE_URL: "http://127.0.0.1:8787"
       SNAPPER_BIN: "/usr/local/bin/spritefusion-pixel-snapper"
       DATA_DIR: "/app/data"
+      # Prefer the bind-mounted package over the image copy so UI/API edits apply live.
+      PYTHONPATH: "/app"
     volumes:
       - ./data:/app/data
+      - ./mcpixel:/app/mcpixel
       - rembg-models:/root/.u2net
+    # --reload picks up Python changes; static HTML/CSS/JS are read from disk each request.
+    command:
+      [
+        "uvicorn",
+        "mcpixel.main:app",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8787",
+        "--reload",
+        "--reload-dir",
+        "/app/mcpixel",
+      ]
     restart: unless-stopped
 
 volumes:

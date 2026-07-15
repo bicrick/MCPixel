@@ -1,36 +1,25 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="forest">
+<html lang="en" data-theme="ink">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MCPixel</title>
   <link rel="stylesheet" href="/static/css/tokens.css" />
-  <link rel="stylesheet" href="/static/css/themes/forest.css" />
-  <link rel="stylesheet" href="/static/css/themes/ink.css" />
   <link rel="stylesheet" href="/static/css/base.css" />
   <link rel="stylesheet" href="/static/css/components.css" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Pixelify+Sans:wght@500;600;700&display=swap" rel="stylesheet" />
-  <script>
-    (function () {
-      var t = localStorage.getItem("mcpixel-theme");
-      if (t === "ink" || t === "forest") document.documentElement.dataset.theme = t;
-    })();
-  </script>
 </head>
 <body>
-  <div class="app">
+  <div class="app" data-main="empty" data-rail-tab="queue">
     <header class="topbar">
       <div class="topbar-brand">
         <span class="brand">MCPixel</span>
         <span class="topbar-tag">Local pixel suite</span>
       </div>
       <div class="topbar-right">
-        <div class="theme-switch" role="group" aria-label="Theme">
-          <button type="button" data-theme="forest" class="active">Forest</button>
-          <button type="button" data-theme="ink">Ink</button>
-        </div>
+        <button type="button" id="settingsBtn" class="secondary topbar-btn">Settings</button>
         <div class="topbar-health" id="healthBar" aria-live="polite">
           <span class="health-dot" id="healthDot" data-state="unknown"></span>
           <span id="healthLabel">Checking…</span>
@@ -39,18 +28,65 @@
     </header>
 
     <nav class="mobile-tabs" role="tablist" aria-label="Workspace">
-      <button type="button" class="mobile-tab active" data-tab="create" role="tab" aria-selected="true">Create</button>
-      <button type="button" class="mobile-tab" data-tab="queue" role="tab" aria-selected="false">Queue</button>
-      <button type="button" class="mobile-tab" data-tab="job" role="tab" aria-selected="false">Job</button>
+      <button type="button" class="mobile-tab" data-tab="create" role="tab">Create</button>
+      <button type="button" class="mobile-tab active" data-tab="queue" role="tab" aria-selected="true">Queue</button>
+      <button type="button" class="mobile-tab" data-tab="job" role="tab">Job</button>
     </nav>
 
     <div class="shell">
       <aside class="rail" id="rail">
-        <section class="rail-section create-pane" data-pane="create">
-          <h2>Create</h2>
+        <div class="rail-new">
+          <button type="button" id="newBtn" class="new-btn">New Image</button>
+        </div>
+        <div class="rail-toolbar">
+          <div class="rail-tabs" role="tablist" aria-label="Library">
+            <button type="button" class="rail-tab active" data-rail="queue">Queue</button>
+            <button type="button" class="rail-tab" data-rail="projects">Projects</button>
+          </div>
+        </div>
+
+        <section class="rail-section queue-pane" data-pane="queue">
+          <div class="queue-head">
+            <div class="queue-head-row">
+              <h2>Jobs</h2>
+              <button type="button" id="clearFailedBtn" class="clear-failed-btn" hidden>Clear failed</button>
+            </div>
+            <div class="queue-filters" role="group" aria-label="Filter jobs">
+              <button type="button" class="filter-btn active" data-filter="all">All</button>
+              <button type="button" class="filter-btn" data-filter="active">Active</button>
+              <button type="button" class="filter-btn" data-filter="done">Done</button>
+              <button type="button" class="filter-btn" data-filter="failed">Failed</button>
+            </div>
+          </div>
+          <div id="queue" class="queue-list"></div>
+        </section>
+
+        <section class="rail-section projects-pane" data-pane="projects" hidden>
+          <div class="queue-head">
+            <div class="queue-head-row">
+              <h2>Projects</h2>
+              <button type="button" id="newProjectBtn" class="secondary topbar-btn">New project</button>
+            </div>
+          </div>
+          <div id="projectsList" class="queue-list"></div>
+          <div id="projectJobs" class="queue-list project-jobs" hidden></div>
+        </section>
+      </aside>
+
+      <main class="workspace" id="workspace">
+        <div id="emptyState" class="empty-state">
+          <p class="empty-title">No job selected</p>
+          <p class="empty-copy">Pick something from the queue, or hit New Image to create a sprite.</p>
+        </div>
+
+        <section id="createView" class="create-view" hidden>
+          <div class="create-view-head">
+            <h2>Create sprite</h2>
+            <p class="meta">Prompt hints only — cutout and snap stay the same.</p>
+          </div>
           <label class="prompt-label">
             Prompt
-            <textarea id="prompt" rows="4" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
+            <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
           </label>
           <div class="size-row">
             <span>Target size (prompt hint)</span>
@@ -68,7 +104,7 @@
               <input id="customH" type="number" min="1" max="1024" placeholder="H" />
             </div>
           </div>
-          <div class="k-row">
+          <div class="create-grid">
             <label>
               Colors (k)
               <input id="kColors" type="number" min="2" max="64" value="16" />
@@ -104,29 +140,6 @@
           </details>
           <p id="status" class="status" aria-live="polite"></p>
         </section>
-
-        <section class="rail-section queue-pane" data-pane="queue">
-          <div class="queue-head">
-            <div class="queue-head-row">
-              <h2>Queue</h2>
-              <button type="button" id="clearFailedBtn" class="clear-failed-btn" hidden>Clear failed</button>
-            </div>
-            <div class="queue-filters" role="group" aria-label="Filter jobs">
-              <button type="button" class="filter-btn active" data-filter="all">All</button>
-              <button type="button" class="filter-btn" data-filter="active">Active</button>
-              <button type="button" class="filter-btn" data-filter="done">Done</button>
-              <button type="button" class="filter-btn" data-filter="failed">Failed</button>
-            </div>
-          </div>
-          <div id="queue" class="queue-list"></div>
-        </section>
-      </aside>
-
-      <main class="workspace" id="workspace" data-pane="job">
-        <div id="emptyState" class="empty-state">
-          <p class="empty-title">No job selected</p>
-          <p class="empty-copy">Generate a sprite or pick one from the queue.</p>
-        </div>
 
         <section id="inspect" class="job-view" hidden>
           <div class="job-head">
@@ -169,6 +182,31 @@
     </div>
   </div>
 
+  <div id="settingsOverlay" class="settings-overlay" hidden>
+    <div class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
+      <div class="editor-head">
+        <h2 id="settingsTitle">Settings</h2>
+        <button type="button" id="closeSettingsBtn" class="secondary">Done</button>
+      </div>
+      <p class="meta settings-note">Keys save to <code>data/settings.json</code> on this machine. Job files live in <code>data/jobs/</code>.</p>
+      <label>
+        OpenAI API key
+        <input id="settingsOpenaiKey" type="password" autocomplete="off" placeholder="sk-…" />
+      </label>
+      <p id="settingsOpenaiHint" class="meta"></p>
+      <label>
+        remove.bg API key (optional)
+        <input id="settingsRemoveBgKey" type="password" autocomplete="off" placeholder="optional" />
+      </label>
+      <p id="settingsRemoveBgHint" class="meta"></p>
+      <div class="actions">
+        <button type="button" id="saveSettingsBtn">Save</button>
+        <button type="button" id="clearOpenaiBtn" class="secondary">Clear OpenAI key</button>
+      </div>
+      <p id="settingsStatus" class="status" aria-live="polite"></p>
+    </div>
+  </div>
+
   <div id="editorOverlay" class="editor-overlay" hidden>
     <div class="editor-drawer" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
       <div class="editor-head">
@@ -182,7 +220,7 @@
         <button type="button" id="undoBtn" class="secondary">Undo</button>
         <button type="button" id="redoBtn" class="secondary">Redo</button>
         <button type="button" id="saveEditBtn">Save edit</button>
-        <input id="color" type="color" value="#1f6f4a" />
+        <input id="color" type="color" value="#e6c35c" />
       </div>
       <div class="palette" id="palette"></div>
       <div class="canvas-wrap">

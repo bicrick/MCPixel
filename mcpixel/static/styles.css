@@ -1,6 +1,4 @@
-/* Legacy entry — prefer css/* modules linked from index.html */
+/* Legacy entry ? prefer css/* modules linked from index.html */
 @import url("./css/tokens.css");
-@import url("./css/themes/forest.css");
-@import url("./css/themes/ink.css");
 @import url("./css/base.css");
 @import url("./css/components.css");

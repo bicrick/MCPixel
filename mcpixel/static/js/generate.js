@@ -134,7 +134,7 @@ export function bindSizeChips() {
 }
 
 export function bindCreateDrop(onFile) {
-  const pane = document.querySelector(".create-pane");
+  const pane = document.querySelector(".create-view");
   if (!pane) return;
   pane.addEventListener("dragover", (e) => {
     e.preventDefault();

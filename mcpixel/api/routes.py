@@ -5,6 +5,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, Field
 
 from mcpixel.jobs.models import (
     BgProvider,
@@ -14,6 +15,15 @@ from mcpixel.jobs.models import (
 )
 from mcpixel.jobs.runner import JobRunner
 from mcpixel.jobs.store import JobStore
+from mcpixel.projects import ProjectStore
+from mcpixel.settings_store import (
+    AppSettingsFile,
+    SettingsUpdate,
+    apply_settings_file,
+    load_settings_file,
+    public_settings_view,
+    save_settings_file,
+)
 
 router = APIRouter(prefix="/v1")
 
@@ -26,11 +36,15 @@ def _store(request: Request) -> JobStore:
     return request.app.state.store
 
 
+def _projects(request: Request) -> ProjectStore:
+    return request.app.state.projects
+
+
 def _settings(request: Request):
     return request.app.state.settings
 
 
-def enrich(job: JobRecord, base_url: str) -> dict:
+def enrich(job: JobRecord, base_url: str, projects: ProjectStore | None = None) -> dict:
     data = job.model_dump()
     urls = {}
     for stage, present in job.stages.items():
@@ -38,6 +52,8 @@ def enrich(job: JobRecord, base_url: str) -> dict:
             urls[stage] = f"{base_url}/v1/jobs/{job.id}/stages/{stage}"
     data["urls"] = urls
     data["ui_url"] = f"{base_url}/?job={job.id}"
+    if projects is not None:
+        data["project_ids"] = [p.id for p in projects.projects_for_job(job.id)]
     return data
 
 
@@ -53,6 +69,29 @@ def health(request: Request) -> dict:
     }
 
 
+@router.get("/settings")
+def get_settings_view(request: Request) -> dict:
+    return public_settings_view(_settings(request))
+
+
+@router.put("/settings")
+def update_settings(body: SettingsUpdate, request: Request) -> dict:
+    settings = _settings(request)
+    current = load_settings_file(settings)
+    data = current.model_dump()
+    if body.clear_openai_api_key:
+        data["openai_api_key"] = ""
+    elif body.openai_api_key is not None and body.openai_api_key.strip():
+        data["openai_api_key"] = body.openai_api_key.strip()
+    if body.clear_remove_bg_api_key:
+        data["remove_bg_api_key"] = ""
+    elif body.remove_bg_api_key is not None and body.remove_bg_api_key.strip():
+        data["remove_bg_api_key"] = body.remove_bg_api_key.strip()
+    saved = save_settings_file(settings, AppSettingsFile.model_validate(data))
+    apply_settings_file(settings, saved, overwrite=True)
+    return public_settings_view(settings)
+
+
 @router.post("/generate")
 def generate(
     body: GenerateRequest,
@@ -62,14 +101,15 @@ def generate(
     runner = _runner(request)
     record = runner.start_generate(body)
     background_tasks.add_task(runner.run_generate, record.id)
-    return enrich(record, _settings(request).public_base_url)
+    return enrich(record, _settings(request).public_base_url, _projects(request))
 
 
 @router.get("/jobs")
 def list_jobs(request: Request, limit: int = 50) -> dict:
     jobs = _store(request).list_jobs(limit=limit)
     base = _settings(request).public_base_url
-    return {"jobs": [enrich(j, base) for j in jobs]}
+    projects = _projects(request)
+    return {"jobs": [enrich(j, base, projects) for j in jobs]}
 
 
 @router.get("/jobs/{job_id}")
@@ -77,7 +117,7 @@ def get_job(job_id: str, request: Request) -> dict:
     job = _store(request).get(job_id)
     if job is None:
         raise HTTPException(404, "Job not found")
-    return enrich(job, _settings(request).public_base_url)
+    return enrich(job, _settings(request).public_base_url, _projects(request))
 
 
 @router.delete("/jobs/{job_id}")
@@ -85,12 +125,18 @@ def delete_job(job_id: str, request: Request) -> dict:
     deleted = _store(request).delete(job_id)
     if not deleted:
         raise HTTPException(404, "Job not found")
+    _projects(request).remove_job_from_all(job_id)
     return {"ok": True, "id": job_id}
 
 
 @router.post("/jobs/clear-failed")
 def clear_failed_jobs(request: Request) -> dict:
-    removed = _store(request).clear_failed()
+    store = _store(request)
+    projects = _projects(request)
+    failed_ids = [j.id for j in store.list_jobs(limit=10_000) if j.status.value == "failed"]
+    removed = store.clear_failed()
+    for job_id in failed_ids:
+        projects.remove_job_from_all(job_id)
     return {"ok": True, "removed": removed}
 
 
@@ -112,7 +158,7 @@ def resnap(job_id: str, body: ResnapRequest, request: Request) -> dict:
         raise HTTPException(404, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
-    return enrich(job, _settings(request).public_base_url)
+    return enrich(job, _settings(request).public_base_url, _projects(request))
 
 
 @router.post("/jobs/{job_id}/edit")
@@ -131,7 +177,7 @@ async def save_edit(job_id: str, request: Request) -> dict:
         job = _runner(request).save_edit(job_id, data)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
-    return enrich(job, _settings(request).public_base_url)
+    return enrich(job, _settings(request).public_base_url, _projects(request))
 
 
 @router.post("/process")
@@ -152,4 +198,59 @@ async def process_upload(
         bg_provider=bg_provider,
         prompt=file.filename or "(upload)",
     )
-    return enrich(job, _settings(request).public_base_url)
+    return enrich(job, _settings(request).public_base_url, _projects(request))
+
+
+class ProjectCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ProjectRename(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class ProjectJobBody(BaseModel):
+    job_id: str = Field(min_length=1)
+
+
+@router.get("/projects")
+def list_projects(request: Request) -> dict:
+    return {"projects": [p.model_dump() for p in _projects(request).list_projects()]}
+
+
+@router.post("/projects")
+def create_project(body: ProjectCreate, request: Request) -> dict:
+    return _projects(request).create(body.name).model_dump()
+
+
+@router.patch("/projects/{project_id}")
+def rename_project(project_id: str, body: ProjectRename, request: Request) -> dict:
+    project = _projects(request).rename(project_id, body.name)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    return project.model_dump()
+
+
+@router.delete("/projects/{project_id}")
+def delete_project(project_id: str, request: Request) -> dict:
+    if not _projects(request).delete(project_id):
+        raise HTTPException(404, "Project not found")
+    return {"ok": True, "id": project_id}
+
+
+@router.post("/projects/{project_id}/jobs")
+def add_job_to_project(project_id: str, body: ProjectJobBody, request: Request) -> dict:
+    if _store(request).get(body.job_id) is None:
+        raise HTTPException(404, "Job not found")
+    project = _projects(request).add_job(project_id, body.job_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    return project.model_dump()
+
+
+@router.delete("/projects/{project_id}/jobs/{job_id}")
+def remove_job_from_project(project_id: str, job_id: str, request: Request) -> dict:
+    project = _projects(request).remove_job(project_id, job_id)
+    if project is None:
+        raise HTTPException(404, "Project not found")
+    return project.model_dump()

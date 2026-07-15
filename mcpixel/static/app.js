@@ -4,9 +4,9 @@ import {
   anyActive,
   bestUrl,
   cacheJobs,
-  initTheme,
-  applyTheme,
+  setMainMode,
   setMobileTab,
+  setRailTab,
   state,
   toast,
   upsertJob,
@@ -15,9 +15,11 @@ import {
   clearFailedJobs,
   closeJobMenu,
   deleteJob,
+  openJobMenu,
+  openProjectMenu,
   renderQueue,
 } from "./js/queue.js";
-import { clearSelection, renderJob } from "./js/job-view.js";
+import { clearSelection, renderJob, showCreate } from "./js/job-view.js";
 import {
   bindEditorEvents,
   closeEditor,
@@ -32,11 +34,33 @@ import {
   setTargetFromJob,
   uploadFile,
 } from "./js/generate.js";
+import {
+  addJobToProject,
+  deleteProject,
+  loadProjects,
+  promptNewProject,
+  removeJobFromProject,
+  renameProject,
+  renderProjectsPane,
+} from "./js/projects.js";
+import { bindSettings, closeSettings } from "./js/settings.js";
 
 const queueHandlers = {
   onSelect: (id) => selectJob(id),
-  onMenuAction: (action, id) => handleMenuAction(action, id),
+  onMenuAction: (action, id, projectId) => handleMenuAction(action, id, projectId),
   onClearFailed: () => handleClearFailed(),
+  onOpenMenu: (id, btn) => {
+    if (state.menuJobId === id && !document.getElementById("jobMenu")?.hidden) {
+      closeJobMenu();
+      return;
+    }
+    closeJobMenu();
+    openJobMenu(id, btn);
+  },
+  onProjectMenu: (projectId, btn) => {
+    closeJobMenu();
+    openProjectMenu(projectId, btn);
+  },
 };
 
 function ensurePolling() {
@@ -78,11 +102,12 @@ async function refreshQueue() {
   const data = await api("/v1/jobs?limit=50");
   cacheJobs(data.jobs || []);
   updateActiveBadge();
-  if (state.currentJobId && state.jobsById.has(state.currentJobId)) {
+  if (state.mainMode === "job" && state.currentJobId && state.jobsById.has(state.currentJobId)) {
     const detail = await api(`/v1/jobs/${state.currentJobId}`);
     renderJob(detail, queueHandlers);
   } else {
     renderQueue(queueHandlers);
+    renderProjectsPane(queueHandlers);
     ensurePolling();
   }
 }
@@ -117,9 +142,33 @@ async function afterNewJob(job) {
   updateActiveBadge();
 }
 
-async function handleMenuAction(action, jobId) {
-  const job = state.jobsById.get(jobId) || (await api(`/v1/jobs/${jobId}`));
+async function handleMenuAction(action, jobId, projectId) {
   try {
+    if (action === "rename-project" && projectId) {
+      const current = state.projects.find((p) => p.id === projectId);
+      const name = prompt("Rename project", current?.name || "");
+      if (!name?.trim()) return;
+      await renameProject(projectId, name.trim());
+      renderProjectsPane(queueHandlers);
+      toast("Renamed.");
+      return;
+    }
+    if (action === "delete-project" && projectId) {
+      const current = state.projects.find((p) => p.id === projectId);
+      if (!confirm(`Delete project “${current?.name || projectId}”? Jobs stay in the queue.`)) {
+        return;
+      }
+      await deleteProject(projectId);
+      renderProjectsPane(queueHandlers);
+      toast("Project deleted.");
+      return;
+    }
+
+    if (!jobId && !["create-then-add"].includes(action)) return;
+    const job = jobId
+      ? state.jobsById.get(jobId) || (await api(`/v1/jobs/${jobId}`))
+      : null;
+
     if (action === "retry" || action === "duplicate") {
       const created = await retryFromJob(job);
       await afterNewJob(created);
@@ -144,6 +193,32 @@ async function handleMenuAction(action, jobId) {
       a.click();
       return;
     }
+    if (action === "pick-project" && projectId && jobId) {
+      await addJobToProject(projectId, jobId);
+      await loadProjects();
+      renderQueue(queueHandlers);
+      renderProjectsPane(queueHandlers);
+      toast("Added to project.");
+      return;
+    }
+    if (action === "create-then-add" && jobId) {
+      const project = await promptNewProject();
+      if (!project) return;
+      await addJobToProject(project.id, jobId);
+      await loadProjects();
+      renderQueue(queueHandlers);
+      renderProjectsPane(queueHandlers);
+      toast("Added to project.");
+      return;
+    }
+    if (action === "remove-project" && projectId && jobId) {
+      await removeJobFromProject(projectId, jobId);
+      await loadProjects();
+      renderQueue(queueHandlers);
+      renderProjectsPane(queueHandlers);
+      toast("Removed from project.");
+      return;
+    }
     if (action === "delete") {
       if (!confirm(`Delete job permanently?\n${job.prompt || jobId}`)) return;
       await deleteJob(jobId);
@@ -152,6 +227,7 @@ async function handleMenuAction(action, jobId) {
         history.replaceState(null, "", "/");
       } else {
         renderQueue(queueHandlers);
+        renderProjectsPane(queueHandlers);
       }
       toast("Deleted.");
       updateActiveBadge();
@@ -170,6 +246,7 @@ async function handleClearFailed() {
       history.replaceState(null, "", "/");
     } else {
       renderQueue(queueHandlers);
+      renderProjectsPane(queueHandlers);
     }
     updateActiveBadge();
   } catch (e) {
@@ -203,18 +280,34 @@ async function resnap() {
   }
 }
 
+function openCreateWorkspace() {
+  showCreate(queueHandlers);
+  setMobileTab("create");
+  $("prompt")?.focus();
+}
+
 function bindUi() {
-  initTheme();
   bindSizeChips();
   bindEditorEvents();
+  bindSettings(() => loadHealth());
   bindCreateDrop((file) =>
     uploadFile(file)
       .then(afterNewJob)
       .catch((e) => toast(e.message))
   );
 
-  document.querySelectorAll(".theme-switch button").forEach((btn) => {
-    btn.addEventListener("click", () => applyTheme(btn.dataset.theme));
+  $("newBtn")?.addEventListener("click", openCreateWorkspace);
+  $("newProjectBtn")?.addEventListener("click", async () => {
+    await promptNewProject();
+    renderProjectsPane(queueHandlers);
+  });
+
+  document.querySelectorAll(".rail-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      setRailTab(btn.dataset.rail);
+      if (btn.dataset.rail === "projects") renderProjectsPane(queueHandlers);
+      else renderQueue(queueHandlers);
+    });
   });
 
   $("generateBtn").addEventListener("click", () =>
@@ -254,7 +347,13 @@ function bindUi() {
   });
 
   document.querySelectorAll(".mobile-tab").forEach((btn) => {
-    btn.addEventListener("click", () => setMobileTab(btn.dataset.tab));
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.tab;
+      setMobileTab(tab);
+      if (tab === "create") openCreateWorkspace();
+      else if (tab === "queue") setRailTab("queue");
+      else if (tab === "job" && state.currentJobId) selectJob(state.currentJobId, { mobileSwitch: false });
+    });
   });
 
   $("editorOverlay").addEventListener("click", (e) => {
@@ -264,10 +363,12 @@ function bindUi() {
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeJobMenu();
+      closeSettings();
       if (!$("editorOverlay").hidden) closeEditor();
     }
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
       e.preventDefault();
+      if (state.mainMode !== "create") openCreateWorkspace();
       generateJob()
         .then((job) => job && afterNewJob(job))
         .catch((err) => toast(err.message));
@@ -281,15 +382,21 @@ function bindUi() {
   });
 }
 
-document.querySelector(".app").dataset.mobileTab = "create";
+setMainMode("empty");
+setRailTab("queue");
+document.querySelector(".app").dataset.mobileTab = "queue";
 bindUi();
 loadHealth();
-refreshQueue()
+Promise.all([refreshQueue(), loadProjects()])
   .then(() => {
+    renderProjectsPane(queueHandlers);
     const params = new URLSearchParams(location.search);
     const jobParam = params.get("job");
     if (jobParam) return selectJob(jobParam, { mobileSwitch: true });
     if (!state.jobsById.size) clearSelection(queueHandlers);
-    else renderQueue(queueHandlers);
+    else {
+      renderQueue(queueHandlers);
+      setMainMode("empty");
+    }
   })
   .catch((e) => toast(e.message));

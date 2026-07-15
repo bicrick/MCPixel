@@ -11,6 +11,8 @@ from mcpixel.api.routes import router
 from mcpixel.config import get_settings
 from mcpixel.jobs.runner import JobRunner, build_registry
 from mcpixel.jobs.store import JobStore
+from mcpixel.projects import ProjectStore
+from mcpixel.settings_store import apply_settings_file, load_settings_file
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("mcpixel")
@@ -20,12 +22,15 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 def create_app() -> FastAPI:
     settings = get_settings()
+    apply_settings_file(settings, load_settings_file(settings))
     store = JobStore(settings)
+    projects = ProjectStore(settings)
     runner = JobRunner(settings, store, build_registry())
 
     app = FastAPI(title="MCPixel", version="0.1.0")
     app.state.settings = settings
     app.state.store = store
+    app.state.projects = projects
     app.state.runner = runner
     app.include_router(router)
 

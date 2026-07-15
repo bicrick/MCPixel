@@ -1,16 +1,23 @@
-/* Shared design tokens — themes override colors only */
+/* Ink-only design tokens */
 :root {
-  --bg0: #0f1410;
-  --bg1: #182018;
-  --bg2: #223024;
-  --ink: #e8f0e6;
-  --muted: #9bb09a;
-  --accent: #3d9b5f;
-  --accent-2: #c4a35a;
+  --bg0: #0a0a0a;
+  --bg1: #121212;
+  --bg2: #1c1c1c;
+  --ink: #ececec;
+  --muted: #9a9a9a;
+  --accent: #d6d6d6;
+  --accent-2: #e6c35c;
+  --success: #5cb87a;
+  --status-queued: #8a9bb0;
+  --status-generating: #e6c35c;
+  --status-cutout: #5aa8a0;
+  --status-snapping: #d49a4a;
+  --status-done: #5cb87a;
+  --status-failed: #c45c4a;
   --danger: #c45c4a;
-  --line: #2c3c30;
-  --cta: var(--accent);
-  --cta-ink: #07140c;
+  --line: #333;
+  --cta: #e6c35c;
+  --cta-ink: #12100a;
   --radius: 0;
   --rail-width: 320px;
   --topbar-h: 48px;

@@ -5,10 +5,12 @@ import {
   STATUS_LABELS,
   bestUrl,
   isActive,
+  setMainMode,
   state,
   upsertJob,
 } from "./state.js";
 import { renderQueue } from "./queue.js";
+import { renderProjectsPane } from "./projects.js";
 
 function stepStates(job) {
   const status = job.status;
@@ -48,15 +50,14 @@ function renderStepper(job) {
   }).join("");
 }
 
-function stageCard(name, url, optional) {
-  const emptyLabel = optional ? "No edit yet" : "Waiting…";
+function stageCard(name, url) {
   return `
     <article class="stage">
-      <h3>${escapeHtml(name)}${optional ? `<span class="opt">optional</span>` : ""}</h3>
+      <h3>${escapeHtml(name)}</h3>
       ${
         url
           ? `<img src="${url}?t=${Date.now()}" alt="${escapeHtml(name)}" />`
-          : `<div class="stage-empty">${emptyLabel}</div>`
+          : `<div class="stage-empty">Waiting…</div>`
       }
     </article>
   `;
@@ -98,16 +99,23 @@ function renderHero(job) {
 
 export function clearSelection(handlers) {
   state.currentJobId = null;
-  $("inspect").hidden = true;
-  $("emptyState").hidden = false;
+  setMainMode("empty");
   renderQueue(handlers);
+  renderProjectsPane(handlers);
+}
+
+export function showCreate(handlers) {
+  state.currentJobId = null;
+  setMainMode("create");
+  history.replaceState(null, "", "/");
+  renderQueue(handlers);
+  renderProjectsPane(handlers);
 }
 
 export function renderJob(job, handlers) {
   upsertJob(job);
   state.currentJobId = job.id;
-  $("emptyState").hidden = true;
-  $("inspect").hidden = false;
+  setMainMode("job");
   $("jobId").textContent = job.id;
   $("jobStatus").textContent = STATUS_LABELS[job.status] || job.status;
   $("jobStatus").dataset.status = job.status;
@@ -119,12 +127,15 @@ export function renderJob(job, handlers) {
   renderHero(job);
 
   const urls = job.urls || {};
-  $("stages").innerHTML = [
-    stageCard("raw", urls.raw, false),
-    stageCard("cutout", urls.cutout, false),
-    stageCard("snapped", urls.snapped, false),
-    stageCard("edited", urls.edited, true),
-  ].join("");
+  const cards = [
+    stageCard("raw", urls.raw),
+    stageCard("cutout", urls.cutout),
+    stageCard("snapped", urls.snapped),
+  ];
+  if (urls.edited) {
+    cards.push(stageCard("edited", urls.edited));
+  }
+  $("stages").innerHTML = cards.join("");
 
   const bits = [];
   if (job.target_width && job.target_height) {
@@ -142,4 +153,5 @@ export function renderJob(job, handlers) {
   $("resnapBtn").disabled = !urls.cutout || isActive(job.status);
 
   renderQueue(handlers);
+  renderProjectsPane(handlers);
 }

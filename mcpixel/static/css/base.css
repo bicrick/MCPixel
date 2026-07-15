@@ -8,10 +8,7 @@ html, body {
 body {
   font-family: var(--font-ui);
   color: var(--ink);
-  background:
-    radial-gradient(1200px 600px at 10% -10%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 55%),
-    radial-gradient(900px 500px at 100% 0%, color-mix(in srgb, var(--accent-2) 18%, transparent) 0%, transparent 50%),
-    var(--bg0);
+  background: var(--bg0);
   overflow: hidden;
 }
 
