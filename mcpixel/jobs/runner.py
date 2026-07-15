@@ -79,6 +79,33 @@ class JobRunner:
             return text
         return f"{text}\n\n{suffix}"
 
+    def _reference_subject_text(self, job_id: str) -> str:
+        """Best short subject description from a library reference job."""
+        rec = self.store.get(job_id)
+        if rec is None:
+            return ""
+        base = (rec.extra or {}).get("base_prompt")
+        if isinstance(base, str) and base.strip() and not base.strip().startswith("8-dir"):
+            return base.strip()
+        text = (rec.prompt or "").strip()
+        if not text or text.startswith("8-dir") or text.startswith("Redraw this exact sprite"):
+            return ""
+        return text
+
+    def _append_reference_subject(self, prompt: str, reference_job_id: str | None) -> str:
+        """Append reference job subject to the model prompt (not shown as the user prompt)."""
+        if not reference_job_id:
+            return prompt
+        subject = self._reference_subject_text(reference_job_id)
+        if not subject:
+            return prompt
+        text = (prompt or "").strip()
+        if not text:
+            return subject
+        if subject in text:
+            return text
+        return f"{text}\n\nReference subject: {subject}"
+
     def start_generate(
         self,
         req: GenerateRequest,
@@ -94,13 +121,19 @@ class JobRunner:
         if req.reference_job_id:
             extra["reference_job_id"] = req.reference_job_id
             extra["reference_stage"] = req.reference_stage or "snapped"
+            subject = self._reference_subject_text(req.reference_job_id)
+            if subject:
+                extra["reference_prompt"] = subject
+
+        # User-facing prompt stays as submitted; model prompt gets reference subject appended.
+        model_prompt = self._append_reference_subject(req.prompt, req.reference_job_id)
 
         record = JobRecord(
             id=job_id,
             status=JobStatus.queued,
             prompt=req.prompt,
             wrapped_prompt=self.wrap_prompt(
-                req.prompt,
+                model_prompt,
                 req.wrap_prompt,
                 target_width=req.target_width,
                 target_height=req.target_height,
@@ -169,7 +202,12 @@ class JobRunner:
         validate_directions_reference(ref_data)
 
         master_code, children = master_and_children(req.reference_facing)
-        label = (req.prompt or "").strip() or f"8-dir · {master_code}"
+        # Prefer submitted prompt; else pull subject text from the library reference job.
+        label = (req.prompt or "").strip()
+        if not label and req.reference_job_id:
+            label = self._reference_subject_text(req.reference_job_id)
+        if not label:
+            label = f"8-dir · {master_code}"
         project_name = (req.project_name or "").strip() or f"8-dir: {label[:48]}"
         project = projects.create(project_name)
         batch_id = self.store.new_id()
@@ -211,6 +249,9 @@ class JobRunner:
         if req.reference_job_id:
             master.extra["reference_job_id"] = req.reference_job_id
             master.extra["reference_stage"] = stage
+            subject = self._reference_subject_text(req.reference_job_id)
+            if subject:
+                master.extra["reference_prompt"] = subject
         self.store.create(master)
         self.store.write_bytes(master_id, "reference", ref_data)
         self.store.write_bytes(master_id, "raw", ref_data)

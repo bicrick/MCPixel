@@ -74,17 +74,25 @@ def pose_locked_direction_prompt(
 ) -> str:
     """
     Child prompt: same pose as reference, only rotate compass facing.
-    Optional label is ignored for identity (reference carries that); kept out of the lock text.
+    When label is a real subject description, prepend it so the edit model
+    gets text identity as well as the reference image.
     """
-    _ = label  # reserved for future naming hints; do not inject into pose lock
     if settings is not None:
-        return format_prompt(settings, "pose_lock", facing=facing_clause_text)
-    from mcpixel.prompts.defaults import POSE_LOCK_TEMPLATE
+        lock = format_prompt(settings, "pose_lock", facing=facing_clause_text)
+    else:
+        from mcpixel.prompts.defaults import POSE_LOCK_TEMPLATE
 
-    try:
-        return POSE_LOCK_TEMPLATE.format(facing=facing_clause_text)
-    except (KeyError, ValueError):
-        return POSE_LOCK_TEMPLATE
+        try:
+            lock = POSE_LOCK_TEMPLATE.format(facing=facing_clause_text)
+        except (KeyError, ValueError):
+            lock = POSE_LOCK_TEMPLATE
+
+    subject = (label or "").strip()
+    if not subject or subject.startswith("8-dir"):
+        return lock
+    if subject.startswith("Redraw this exact sprite"):
+        return lock
+    return f"{subject}\n\n{lock}"
 
 
 def image_dimensions(png_bytes: bytes) -> tuple[int, int]:
