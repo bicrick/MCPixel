@@ -121,7 +121,7 @@
                 </div>
                 <div class="prompt-wrap">
                   <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
-                  <button type="button" id="refinePromptBtn" class="refine-btn" data-tip="Refine prompt with AI" data-tip-mode="hover" aria-label="Refine prompt with AI">✦</button>
+                  <button type="button" id="refinePromptBtn" class="refine-btn" data-tip="Refine as a pixel-art sprite prompt (AI). ⌘Z undoes." data-tip-mode="hover" aria-label="Refine prompt with AI">✦</button>
                 </div>
               </div>
               <div class="reference-row">
@@ -393,11 +393,32 @@
         <input id="settingsMaxParallelJobs" type="number" min="1" max="16" step="1" value="4" />
       </label>
       <p class="meta">How many generations can run at once. Extra jobs stay queued. Default 4 (1–16).</p>
+      <div class="settings-prompts-row">
+        <button type="button" id="editPromptsBtn" class="secondary">Edit prompts…</button>
+        <p class="meta">Tune refine, wrap, framing, and 8-direction pose-lock text.</p>
+      </div>
       <div class="actions">
         <button type="button" id="saveSettingsBtn">Save</button>
         <button type="button" id="clearOpenaiBtn" class="secondary">Clear OpenAI key</button>
+        <button type="button" id="factoryResetBtn" class="danger-btn">Factory reset settings</button>
       </div>
       <p id="settingsStatus" class="status" aria-live="polite"></p>
+    </div>
+  </div>
+
+  <div id="promptsOverlay" class="prompts-overlay" hidden>
+    <div class="prompts-modal" role="dialog" aria-modal="true" aria-labelledby="promptsTitle">
+      <div class="editor-head">
+        <h2 id="promptsTitle">Prompts</h2>
+        <button type="button" id="closePromptsBtn" class="secondary">Close</button>
+      </div>
+      <p class="meta settings-note">Overrides save to <code>data/settings.json</code>. Leave a field as the factory text, or edit and Save. Placeholders like <code>{width}</code> must stay intact.</p>
+      <div id="promptsFields" class="prompts-fields"></div>
+      <div class="actions">
+        <button type="button" id="savePromptsBtn">Save prompts</button>
+        <button type="button" id="resetPromptsBtn" class="secondary">Reset prompts</button>
+      </div>
+      <p id="promptsStatus" class="status" aria-live="polite"></p>
     </div>
   </div>
 

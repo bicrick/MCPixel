@@ -70,7 +70,7 @@ import {
   removeJobFromProject,
   renameProject,
 } from "./js/projects.js";
-import { bindSettings, closeSettings } from "./js/settings.js";
+import { bindSettings, closePrompts, closeSettings } from "./js/settings.js";
 import { bindInfoTips } from "./js/tooltips.js";
 import { confirmDialog, promptDialog } from "./js/dialogs.js";
 
@@ -676,9 +676,13 @@ function bindUi() {
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       closeJobMenu();
-      closeSettings();
-      closeRefPicker();
       closeChooseRefMenu();
+      if ($("promptsOverlay") && !$("promptsOverlay").hidden) {
+        closePrompts();
+      } else {
+        closeSettings();
+      }
+      closeRefPicker();
       if (!$("editorOverlay").hidden) closeEditor();
     }
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {

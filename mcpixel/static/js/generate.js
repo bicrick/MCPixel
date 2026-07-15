@@ -5,6 +5,7 @@ import {
   K_PRESETS,
   SIZE_PRESETS,
   bestUrl,
+  setStatus,
   sortedJobs,
   state,
   toast,
@@ -208,23 +209,119 @@ export async function refinePrompt() {
     return;
   }
   const btn = $("refinePromptBtn");
+  const kind = state.createMode === "background" ? "background" : "sprite";
+  const label = kind === "background" ? "background" : "sprite";
   btn.classList.add("busy");
   btn.disabled = true;
-  toast("Refining prompt…");
+
+  const started = Date.now();
+  let tickTimer = null;
+  const setRefineStatus = (msg) => {
+    // Sticky while refining — don't auto-clear mid-request
+    clearTimeout(state.toastTimer);
+    setStatus(msg);
+  };
+  const elapsed = () => Math.max(0, Math.round((Date.now() - started) / 1000));
+  setRefineStatus(`Refining ${label} prompt… contacting AI`);
+  tickTimer = setInterval(() => {
+    setRefineStatus(`Refining ${label} prompt… ${elapsed()}s`);
+  }, 1000);
+
   try {
     const data = await api("/v1/prompt/refine", {
       method: "POST",
-      body: JSON.stringify({ prompt }),
+      body: JSON.stringify({ prompt, kind }),
     });
+    const refined = (data.refined || "").trim();
+    if (!refined) throw new Error("Empty refined prompt");
+
     state.promptBeforeRefine = prompt;
-    el.value = data.refined;
-    toast("Prompt refined.");
+    applyRefinedPrompt(el, refined);
+
+    const model = data.model || "AI";
+    const secs = elapsed();
+    toast(`Refined with ${model} (${secs}s). ⌘Z / Ctrl+Z undoes.`);
   } catch (e) {
-    toast(e.message);
+    toast(e.message || "Refine failed");
   } finally {
+    if (tickTimer) clearInterval(tickTimer);
     btn.classList.remove("busy");
     btn.disabled = false;
   }
+}
+
+/** Replace textarea contents in a way browsers can undo (⌘Z). */
+function applyRefinedPrompt(el, refined) {
+  el.focus();
+  const before = el.value;
+  el.dataset.refineApplying = "1";
+  try {
+    try {
+      el.select();
+      const ok =
+        typeof document.execCommand === "function" &&
+        document.execCommand("insertText", false, refined);
+      if (ok && el.value === refined) return;
+    } catch {
+      /* fall through */
+    }
+    el.value = refined;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    if (el.value !== before) {
+      state.promptBeforeRefine = before.trim() || state.promptBeforeRefine;
+    }
+  } finally {
+    delete el.dataset.refineApplying;
+  }
+}
+
+export function undoRefinePrompt() {
+  const el = $("prompt");
+  const prev = state.promptBeforeRefine;
+  if (!el || prev == null) return false;
+  const current = el.value;
+  el.focus();
+  el.dataset.refineApplying = "1";
+  try {
+    try {
+      el.select();
+      const ok =
+        typeof document.execCommand === "function" &&
+        document.execCommand("insertText", false, prev);
+      if (ok && el.value === prev) {
+        state.promptBeforeRefine = null;
+        toast("Undid refine.");
+        return true;
+      }
+    } catch {
+      /* fall through */
+    }
+    if (current === prev) return false;
+    el.value = prev;
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+    state.promptBeforeRefine = null;
+    toast("Undid refine.");
+    return true;
+  } finally {
+    delete el.dataset.refineApplying;
+  }
+}
+
+export function bindRefineUndo() {
+  const el = $("prompt");
+  if (!el || el.dataset.refineUndoBound) return;
+  el.dataset.refineUndoBound = "1";
+  el.addEventListener("keydown", (e) => {
+    const mod = e.metaKey || e.ctrlKey;
+    if (!mod || e.key.toLowerCase() !== "z" || e.shiftKey || e.altKey) return;
+    if (state.promptBeforeRefine == null) return;
+    if (el.value === state.promptBeforeRefine) {
+      state.promptBeforeRefine = null;
+      return;
+    }
+    e.preventDefault();
+    undoRefinePrompt();
+  });
 }
 
 export function syncFacingChips() {
@@ -282,6 +379,12 @@ export function syncRotationsFormChrome() {
       : "16-color side-view slime, green jelly, cute, game sprite";
   }
   if (refine) refine.hidden = rotations;
+  if (refine && !rotations) {
+    refine.dataset.tip =
+      background
+        ? "Refine as a full-scene background prompt (AI). ⌘Z undoes."
+        : "Refine as a pixel-art sprite prompt (AI). ⌘Z undoes.";
+  }
   if (refOpt) refOpt.textContent = rotations ? "Required" : "Optional";
   if (refTip) {
     refTip.dataset.tip = rotations
@@ -700,6 +803,7 @@ export function bindReferenceControls({ onPickJob } = {}) {
   });
   $("clearRefBtn")?.addEventListener("click", clearReference);
   $("refinePromptBtn")?.addEventListener("click", () => refinePrompt());
+  bindRefineUndo();
 
   $("chooseRefBtn")?.addEventListener("click", (e) => {
     e.stopPropagation();

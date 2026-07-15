@@ -6,24 +6,30 @@ from io import BytesIO
 
 from PIL import Image
 
+from mcpixel.config import Settings
+from mcpixel.prompts.defaults import FACING_BY_CODE, TOPDOWN8_DIRECTIONS
+from mcpixel.prompts.resolve import format_prompt
+
 # Longest edge of a user-supplied reference for Pose = 8 directions.
 MAX_DIRECTIONS_REF_SIDE = 1024
 
 DIRECTION_CODES = ("N", "NE", "E", "SE", "S", "SW", "W", "NW")
 
-# Compass code → short facing clause (used inside pose-locked prompts).
-TOPDOWN8_DIRECTIONS: list[tuple[str, str]] = [
-    ("N", "facing north (away from camera)"),
-    ("NE", "facing north-east"),
-    ("E", "facing east (right)"),
-    ("SE", "facing south-east"),
-    ("S", "facing south (toward camera)"),
-    ("SW", "facing south-west"),
-    ("W", "facing west (left)"),
-    ("NW", "facing north-west"),
+# Re-export for callers that imported from this module.
+__all__ = [
+    "DIRECTION_CODES",
+    "FACING_BY_CODE",
+    "MASTER_DIRECTION",
+    "MAX_DIRECTIONS_REF_SIDE",
+    "TOPDOWN8_DIRECTIONS",
+    "direction_prompt",
+    "facing_clause",
+    "image_dimensions",
+    "master_and_children",
+    "normalize_facing",
+    "pose_locked_direction_prompt",
+    "validate_directions_reference",
 ]
-
-FACING_BY_CODE: dict[str, str] = dict(TOPDOWN8_DIRECTIONS)
 
 # Legacy default when caller does not specify.
 MASTER_DIRECTION = "S"
@@ -49,29 +55,36 @@ def master_and_children(reference_facing: str) -> tuple[str, list[tuple[str, str
     return master, children
 
 
-def direction_prompt(base_prompt: str, facing_clause_text: str) -> str:
+def direction_prompt(
+    base_prompt: str,
+    facing_clause_text: str,
+    settings: Settings | None = None,
+) -> str:
     """Legacy helper — prefer pose_locked_direction_prompt for 8-dir children."""
     base = base_prompt.strip()
-    return pose_locked_direction_prompt(facing_clause_text, label=base or None)
+    return pose_locked_direction_prompt(
+        facing_clause_text, label=base or None, settings=settings
+    )
 
 
-def pose_locked_direction_prompt(facing_clause_text: str, label: str | None = None) -> str:
+def pose_locked_direction_prompt(
+    facing_clause_text: str,
+    label: str | None = None,
+    settings: Settings | None = None,
+) -> str:
     """
     Child prompt: same pose as reference, only rotate compass facing.
     Optional label is ignored for identity (reference carries that); kept out of the lock text.
     """
     _ = label  # reserved for future naming hints; do not inject into pose lock
-    return (
-        "Redraw this exact sprite from a different compass facing.\n"
-        "Keep the IDENTICAL pose as the reference "
-        "(same stance, limbs, prop grip, body angle relative to itself).\n"
-        f"Only rotate the character in place so they are now {facing_clause_text}, "
-        "top-down orthographic game sprite.\n"
-        "Do not change the action or invent a new pose. "
-        "Do not move arms, legs, or props into a different gesture.\n"
-        "Same character, proportions, colors, and silhouette as the reference. "
-        "Single centered subject, pixel art, clear outline, no background clutter."
-    )
+    if settings is not None:
+        return format_prompt(settings, "pose_lock", facing=facing_clause_text)
+    from mcpixel.prompts.defaults import POSE_LOCK_TEMPLATE
+
+    try:
+        return POSE_LOCK_TEMPLATE.format(facing=facing_clause_text)
+    except (KeyError, ValueError):
+        return POSE_LOCK_TEMPLATE
 
 
 def image_dimensions(png_bytes: bytes) -> tuple[int, int]:

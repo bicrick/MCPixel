@@ -73,6 +73,8 @@ export const state = {
   referenceJobId: null,
   referenceObjectUrl: null,
   promptBeforeRefine: null,
+  refineUndoPending: false,
+  refineStatusTimer: null,
   menuJobId: null,
   menuMode: "job", // job | project-pick
   lastQueueFp: null,

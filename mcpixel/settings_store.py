@@ -11,12 +11,24 @@ from mcpixel.jobs.pool import (
     MIN_PARALLEL_JOBS,
     clamp_parallel_jobs,
 )
+from mcpixel.prompts.defaults import PROMPT_KEYS
+from mcpixel.prompts.resolve import prompt_catalog
+
+
+class PromptOverrides(BaseModel):
+    sprite_refine: str | None = None
+    background_refine: str | None = None
+    wrap_suffix: str | None = None
+    sprite_framing: str | None = None
+    background_framing: str | None = None
+    pose_lock: str | None = None
 
 
 class AppSettingsFile(BaseModel):
     openai_api_key: str | None = None
     remove_bg_api_key: str | None = None
     max_parallel_jobs: int | None = None
+    prompts: PromptOverrides = Field(default_factory=PromptOverrides)
 
 
 def settings_path(settings: Settings) -> Path:
@@ -59,6 +71,21 @@ def apply_settings_file(
             settings.remove_bg_api_key = file.remove_bg_api_key or None
     if file.max_parallel_jobs is not None:
         settings.max_parallel_jobs = clamp_parallel_jobs(file.max_parallel_jobs)
+    # Always sync prompt overrides from persisted file
+    settings.prompt_overrides = file.prompts.model_dump()
+    return settings
+
+
+def apply_factory_reset(settings: Settings) -> Settings:
+    """Clear persisted settings and restore runtime keys/prompts/parallel to env+code defaults."""
+    empty = AppSettingsFile()
+    save_settings_file(settings, empty)
+    # Re-read base from env for keys that lived only in the file
+    fresh = Settings()
+    settings.openai_api_key = fresh.openai_api_key
+    settings.remove_bg_api_key = fresh.remove_bg_api_key
+    settings.max_parallel_jobs = clamp_parallel_jobs(fresh.max_parallel_jobs)
+    settings.prompt_overrides = {}
     return settings
 
 
@@ -78,6 +105,8 @@ def public_settings_view(settings: Settings) -> dict[str, Any]:
         "data_dir": str(settings.data_dir),
         "jobs_dir": str(settings.jobs_dir),
         "openai_image_model": settings.openai_image_model,
+        "openai_text_model": settings.openai_text_model,
+        "prompts": prompt_catalog(settings),
     }
 
 
@@ -87,3 +116,28 @@ class SettingsUpdate(BaseModel):
     max_parallel_jobs: int | None = Field(default=None)
     clear_openai_api_key: bool = False
     clear_remove_bg_api_key: bool = False
+    reset_prompts: bool = False
+    factory_reset: bool = False
+    prompts: dict[str, str | None] | None = None
+
+
+def merge_prompt_overrides(
+    current: PromptOverrides,
+    updates: dict[str, str | None] | None,
+    *,
+    reset: bool = False,
+) -> PromptOverrides:
+    if reset:
+        return PromptOverrides()
+    if not updates:
+        return current
+    data = current.model_dump()
+    for key in PROMPT_KEYS:
+        if key not in updates:
+            continue
+        value = updates[key]
+        if value is None or (isinstance(value, str) and value.strip() == ""):
+            data[key] = None
+        else:
+            data[key] = value
+    return PromptOverrides.model_validate(data)

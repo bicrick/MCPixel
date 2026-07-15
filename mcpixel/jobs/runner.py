@@ -25,6 +25,7 @@ from mcpixel.pipeline.directions import (
 )
 from mcpixel.pipeline.snapper import snap_image
 from mcpixel.projects import ProjectStore
+from mcpixel.prompts.resolve import aspect_hint_for_size, format_prompt, get_prompt
 from mcpixel.providers.base import ProviderRegistry
 from mcpixel.providers.openai_images import OpenAIImageProvider
 
@@ -54,25 +55,26 @@ class JobRunner:
     ) -> str:
         text = prompt.strip()
         if kind == AssetKind.background:
-            if image_size == ImageSize.landscape:
-                framing = "Wide landscape framing (16:9)."
-            elif image_size == ImageSize.portrait:
-                framing = "Tall portrait framing (9:16)."
-            else:
-                framing = "Square framing (1:1)."
-            text = (
-                f"{text}\n\nFull-bleed pixel-art environment / background scene. "
-                f"{framing} No single character focus; fill the frame with scenery "
-                "suitable for a game backdrop."
+            size_val = (
+                image_size.value if hasattr(image_size, "value") else str(image_size)
             )
+            framing = format_prompt(
+                self.settings,
+                "background_framing",
+                aspect_hint=aspect_hint_for_size(size_val),
+            )
+            text = f"{text}\n\n{framing}"
         elif target_width and target_height:
-            text = (
-                f"{text}\n\nTarget sprite roughly {target_width}x{target_height} pixels, "
-                "single centered subject, clear silhouette, game asset framing."
+            framing = format_prompt(
+                self.settings,
+                "sprite_framing",
+                width=target_width,
+                height=target_height,
             )
+            text = f"{text}\n\n{framing}"
         if not wrap:
             return text
-        suffix = self.settings.default_prompt_suffix.strip()
+        suffix = get_prompt(self.settings, "wrap_suffix").strip()
         if not suffix:
             return text
         return f"{text}\n\n{suffix}"
@@ -218,7 +220,9 @@ class JobRunner:
 
         records: list[JobRecord] = [master]
         for code, clause in children:
-            prompt = pose_locked_direction_prompt(clause, label=label)
+            prompt = pose_locked_direction_prompt(
+                clause, label=label, settings=self.settings
+            )
             child_req = GenerateRequest(
                 prompt=prompt,
                 provider=req.provider,

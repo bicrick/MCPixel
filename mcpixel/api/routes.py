@@ -24,8 +24,10 @@ from mcpixel.providers.openai_text import refine_pixel_prompt
 from mcpixel.settings_store import (
     AppSettingsFile,
     SettingsUpdate,
+    apply_factory_reset,
     apply_settings_file,
     load_settings_file,
+    merge_prompt_overrides,
     public_settings_view,
     save_settings_file,
 )
@@ -86,8 +88,15 @@ def get_settings_view(request: Request) -> dict:
 @router.put("/settings")
 def update_settings(body: SettingsUpdate, request: Request) -> dict:
     settings = _settings(request)
+
+    if body.factory_reset:
+        apply_factory_reset(settings)
+        _job_pool(request).set_max_workers(settings.max_parallel_jobs)
+        return public_settings_view(settings)
+
     current = load_settings_file(settings)
     data = current.model_dump()
+
     if body.clear_openai_api_key:
         data["openai_api_key"] = ""
     elif body.openai_api_key is not None and body.openai_api_key.strip():
@@ -98,6 +107,14 @@ def update_settings(body: SettingsUpdate, request: Request) -> dict:
         data["remove_bg_api_key"] = body.remove_bg_api_key.strip()
     if body.max_parallel_jobs is not None:
         data["max_parallel_jobs"] = clamp_parallel_jobs(body.max_parallel_jobs)
+
+    prompts = merge_prompt_overrides(
+        current.prompts,
+        body.prompts,
+        reset=body.reset_prompts,
+    )
+    data["prompts"] = prompts.model_dump()
+
     saved = save_settings_file(settings, AppSettingsFile.model_validate(data))
     apply_settings_file(settings, saved, overwrite=True)
     _job_pool(request).set_max_workers(settings.max_parallel_jobs)
@@ -106,6 +123,7 @@ def update_settings(body: SettingsUpdate, request: Request) -> dict:
 
 class PromptRefineRequest(BaseModel):
     prompt: str = Field(min_length=1)
+    kind: str = "sprite"  # sprite | background
 
 
 @router.post("/prompt/refine")
@@ -113,13 +131,20 @@ def refine_prompt(body: PromptRefineRequest, request: Request) -> dict:
     settings = _settings(request)
     if not settings.openai_api_key:
         raise HTTPException(503, "OpenAI API key not configured")
+    kind = (body.kind or "sprite").strip().lower()
+    if kind not in {"sprite", "background"}:
+        kind = "sprite"
     try:
-        refined = refine_pixel_prompt(body.prompt, settings)
+        refined = refine_pixel_prompt(body.prompt, settings, kind=kind)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except Exception as exc:
         raise HTTPException(502, str(exc)) from exc
-    return {"refined": refined}
+    return {
+        "refined": refined,
+        "kind": kind,
+        "model": settings.openai_text_model,
+    }
 
 
 @router.post("/generate")
