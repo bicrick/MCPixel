@@ -29,18 +29,35 @@ class ImageProviderName(str, Enum):
 class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1)
     provider: ImageProviderName = ImageProviderName.openai
-    k_colors: int = Field(default=16, ge=2, le=64)
+    k_colors: int | None = 16
     pixel_size: float | None = Field(default=None, gt=0)
     bg_provider: BgProvider = BgProvider.rembg_birefnet
     wrap_prompt: bool = True
     skip_bg_remove: bool = False
     target_width: int | None = Field(default=None, ge=1, le=1024)
     target_height: int | None = Field(default=None, ge=1, le=1024)
+    reference_job_id: str | None = None
+    reference_stage: str | None = None
+
+    def model_post_init(self, __context) -> None:
+        if self.k_colors is not None and not (2 <= self.k_colors <= 64):
+            raise ValueError("k_colors must be between 2 and 64, or null")
+        if self.reference_stage and self.reference_stage not in {
+            "snapped",
+            "edited",
+            "cutout",
+            "raw",
+        }:
+            raise ValueError("invalid reference_stage")
 
 
 class ResnapRequest(BaseModel):
-    k_colors: int = Field(default=16, ge=2, le=64)
+    k_colors: int | None = 16
     pixel_size: float | None = Field(default=None, gt=0)
+
+    def model_post_init(self, __context) -> None:
+        if self.k_colors is not None and not (2 <= self.k_colors <= 64):
+            raise ValueError("k_colors must be between 2 and 64, or null")
 
 
 class JobRecord(BaseModel):
@@ -49,7 +66,7 @@ class JobRecord(BaseModel):
     prompt: str
     wrapped_prompt: str | None = None
     provider: ImageProviderName = ImageProviderName.openai
-    k_colors: int = 16
+    k_colors: int | None = 16
     pixel_size: float | None = None
     bg_provider: BgProvider = BgProvider.rembg_birefnet
     target_width: int | None = None

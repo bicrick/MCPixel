@@ -13,6 +13,7 @@ import {
   upsertJob,
 } from "./state.js";
 import { renderQueue } from "./queue.js";
+import { renderLibrary } from "./library.js";
 import { renderProjectsPane } from "./projects.js";
 
 function stepStates(job) {
@@ -235,6 +236,7 @@ export function clearSelection(handlers) {
   const bar = $("jobProgress");
   if (bar) bar.hidden = true;
   renderQueue(handlers, { force: true });
+  renderLibrary(handlers, { force: true });
   renderProjectsPane(handlers);
 }
 
@@ -247,6 +249,7 @@ export function showCreate(handlers) {
   const bar = $("jobProgress");
   if (bar) bar.hidden = true;
   renderQueue(handlers, { force: true });
+  renderLibrary(handlers, { force: true });
   renderProjectsPane(handlers);
 }
 
@@ -286,5 +289,6 @@ export function renderJob(job, handlers, opts = {}) {
   state.lastJobFp = fp;
 
   renderQueue(handlers, { force: switching });
+  renderLibrary(handlers, { force: switching });
   if (switching) renderProjectsPane(handlers);
 }

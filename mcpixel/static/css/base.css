@@ -66,7 +66,11 @@ button.secondary, .tool, .file-btn, .download-btn {
   border-color: var(--line);
 }
 
-button:disabled { opacity: 0.5; cursor: not-allowed; }
+button[hidden],
+.file-btn[hidden],
+[hidden] {
+  display: none !important;
+}
 
 a { color: inherit; }
 

@@ -22,6 +22,7 @@ import {
   openProjectMenu,
   renderQueue,
 } from "./js/queue.js";
+import { renderLibrary } from "./js/library.js";
 import { clearSelection, renderJob, showCreate } from "./js/job-view.js";
 import {
   bindEditorEvents,
@@ -31,8 +32,13 @@ import {
 } from "./js/editor.js";
 import {
   bindCreateDrop,
+  bindCreateMenu,
+  bindKChips,
+  bindReferenceControls,
   bindSizeChips,
+  closeRefPicker,
   generateJob,
+  openRefPicker,
   retryFromJob,
   setTargetFromJob,
   uploadFile,
@@ -117,10 +123,14 @@ async function refreshQueue() {
       renderJob(detail, queueHandlers);
     } else if (listFp !== state.lastQueueFp) {
       renderQueue(queueHandlers);
+      renderLibrary(queueHandlers);
     }
   } else if (listFp !== state.lastQueueFp) {
     renderQueue(queueHandlers);
+    renderLibrary(queueHandlers);
     renderProjectsPane(queueHandlers);
+  } else if (state.railTab === "library") {
+    renderLibrary(queueHandlers);
   }
 
   ensurePolling();
@@ -212,6 +222,7 @@ async function handleMenuAction(action, jobId, projectId) {
       await addJobToProject(projectId, jobId);
       await loadProjects();
       renderQueue(queueHandlers);
+      renderLibrary(queueHandlers);
       renderProjectsPane(queueHandlers);
       toast("Added to project.");
       return;
@@ -222,6 +233,7 @@ async function handleMenuAction(action, jobId, projectId) {
       await addJobToProject(project.id, jobId);
       await loadProjects();
       renderQueue(queueHandlers);
+      renderLibrary(queueHandlers);
       renderProjectsPane(queueHandlers);
       toast("Added to project.");
       return;
@@ -230,6 +242,7 @@ async function handleMenuAction(action, jobId, projectId) {
       await removeJobFromProject(projectId, jobId);
       await loadProjects();
       renderQueue(queueHandlers);
+      renderLibrary(queueHandlers);
       renderProjectsPane(queueHandlers);
       toast("Removed from project.");
       return;
@@ -242,6 +255,7 @@ async function handleMenuAction(action, jobId, projectId) {
         history.replaceState(null, "", "/");
       } else {
         renderQueue(queueHandlers);
+        renderLibrary(queueHandlers);
         renderProjectsPane(queueHandlers);
       }
       toast("Deleted.");
@@ -261,6 +275,7 @@ async function handleClearFailed() {
       history.replaceState(null, "", "/");
     } else {
       renderQueue(queueHandlers);
+      renderLibrary(queueHandlers);
       renderProjectsPane(queueHandlers);
     }
     updateActiveBadge();
@@ -303,6 +318,7 @@ function openCreateWorkspace() {
 
 function bindUi() {
   bindSizeChips();
+  bindKChips();
   bindEditorEvents();
   bindSettings(() => loadHealth());
   bindCreateDrop((file) =>
@@ -310,8 +326,14 @@ function bindUi() {
       .then(afterNewJob)
       .catch((e) => toast(e.message))
   );
+  bindCreateMenu({ onCreateSprite: openCreateWorkspace });
+  bindReferenceControls({ onPickJob: openRefPicker });
 
-  $("newBtn")?.addEventListener("click", openCreateWorkspace);
+  $("closeRefPickerBtn")?.addEventListener("click", closeRefPicker);
+  $("refPickerOverlay")?.addEventListener("click", (e) => {
+    if (e.target === $("refPickerOverlay")) closeRefPicker();
+  });
+
   $("newProjectBtn")?.addEventListener("click", async () => {
     await promptNewProject();
     renderProjectsPane(queueHandlers);
@@ -321,6 +343,7 @@ function bindUi() {
     btn.addEventListener("click", () => {
       setRailTab(btn.dataset.rail);
       if (btn.dataset.rail === "projects") renderProjectsPane(queueHandlers);
+      else if (btn.dataset.rail === "library") renderLibrary(queueHandlers);
       else renderQueue(queueHandlers);
     });
   });
@@ -380,6 +403,7 @@ function bindUi() {
     if (e.key === "Escape") {
       closeJobMenu();
       closeSettings();
+      closeRefPicker();
       if (!$("editorOverlay").hidden) closeEditor();
     }
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -406,12 +430,14 @@ loadHealth();
 Promise.all([refreshQueue(), loadProjects()])
   .then(() => {
     renderProjectsPane(queueHandlers);
+    renderLibrary(queueHandlers);
     const params = new URLSearchParams(location.search);
     const jobParam = params.get("job");
     if (jobParam) return selectJob(jobParam, { mobileSwitch: true });
     if (!state.jobsById.size) clearSelection(queueHandlers);
     else {
       renderQueue(queueHandlers);
+      renderLibrary(queueHandlers);
       setMainMode("empty");
     }
   })

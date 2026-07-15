@@ -35,11 +35,12 @@
     <div class="shell">
       <aside class="rail" id="rail">
         <div class="rail-new">
-          <button type="button" id="newBtn" class="new-btn">New Image</button>
+          <button type="button" id="newBtn" class="new-btn" title="New">+</button>
         </div>
         <div class="rail-toolbar">
           <div class="rail-tabs" role="tablist" aria-label="Library">
             <button type="button" class="rail-tab active" data-rail="queue">Queue</button>
+            <button type="button" class="rail-tab" data-rail="library">Library</button>
             <button type="button" class="rail-tab" data-rail="projects">Projects</button>
           </div>
         </div>
@@ -58,6 +59,16 @@
             </div>
           </div>
           <div id="queue" class="queue-list"></div>
+        </section>
+
+        <section class="rail-section library-pane" data-pane="library" hidden>
+          <div class="queue-head">
+            <div class="queue-head-row">
+              <h2>Library</h2>
+            </div>
+            <p class="meta library-blurb">Completed sprites you can open or use as references.</p>
+          </div>
+          <div id="libraryGrid" class="library-grid"></div>
         </section>
 
         <section class="rail-section projects-pane" data-pane="projects" hidden>
@@ -79,69 +90,115 @@
       <main class="workspace" id="workspace">
         <div id="emptyState" class="empty-state">
           <p class="empty-title">No job selected</p>
-          <p class="empty-copy">Pick something from the queue, or hit New Image to create a sprite.</p>
+          <p class="empty-copy">Pick something from the queue or library, or hit + to create a sprite.</p>
         </div>
 
         <section id="createView" class="create-view" hidden>
+          <div class="create-mode-bar" role="tablist" aria-label="Create mode">
+            <button type="button" class="create-mode-tab active" data-create-mode="sprite" role="tab" aria-selected="true">Create sprite</button>
+            <button type="button" class="create-mode-tab" data-create-mode="rotations" role="tab" disabled>Create 8 rotations <span class="soon">Coming soon</span></button>
+            <button type="button" class="create-mode-tab" data-create-mode="animation" role="tab" disabled>Create animation <span class="soon">Coming in v5</span></button>
+            <button type="button" class="create-mode-tab" data-create-mode="rotations-animation" role="tab" disabled>8 rotations + animation <span class="soon">Coming in v5</span></button>
+          </div>
           <div class="create-view-head">
-            <h2>Create sprite</h2>
-            <p class="meta">Prompt hints only — cutout and snap stay the same.</p>
+            <h2 id="createModeTitle">Create sprite</h2>
+            <p class="meta" id="createModeMeta">Target size is a prompt hint — cutout and snap stay the same.</p>
           </div>
-          <label class="prompt-label">
-            Prompt
-            <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
-          </label>
-          <div class="size-row">
-            <span>Target size (prompt hint)</span>
-            <div class="chip-row" id="sizeChips">
-              <button type="button" class="size-chip" data-size="16">16</button>
-              <button type="button" class="size-chip" data-size="32">32</button>
-              <button type="button" class="size-chip" data-size="48">48</button>
-              <button type="button" class="size-chip active" data-size="64">64</button>
-              <button type="button" class="size-chip" data-size="custom">Custom</button>
-              <button type="button" class="size-chip" data-size="none">None</button>
+          <div class="create-layout">
+            <div class="create-main-col">
+              <div class="prompt-field">
+                <div class="prompt-field-head">
+                  <span>Prompt</span>
+                  <button type="button" id="refinePromptBtn" class="refine-btn" title="Refine prompt with AI" aria-label="Refine prompt">✦</button>
+                </div>
+                <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
+              </div>
+              <div class="reference-row">
+                <div class="reference-head">
+                  <span>Reference image</span>
+                  <span class="meta-inline">Guides the model — not the same as Upload</span>
+                </div>
+                <div class="reference-card" id="referenceCard">
+                  <div class="reference-thumb-wrap" id="referenceThumbWrap">
+                    <img id="referenceThumb" alt="" hidden />
+                    <span class="reference-placeholder" id="referencePlaceholder">No reference</span>
+                  </div>
+                  <div class="reference-card-body">
+                    <p id="referenceLabel" class="reference-label">Optional — choose a file or pick from the library</p>
+                    <div class="reference-controls">
+                      <label class="file-btn secondary-file">
+                        Choose file
+                        <input id="referenceFile" type="file" accept="image/png,image/jpeg" hidden />
+                      </label>
+                      <button type="button" id="pickRefJobBtn" class="secondary">Pick from library</button>
+                      <button type="button" id="clearRefBtn" class="secondary" hidden>Clear</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="custom-size" id="customSize" hidden>
-              <input id="customW" type="number" min="1" max="1024" placeholder="W" />
-              <span>×</span>
-              <input id="customH" type="number" min="1" max="1024" placeholder="H" />
+            <div class="create-side-col">
+              <div class="size-row">
+                <span>Target size (prompt hint)</span>
+                <div class="chip-row" id="sizeChips">
+                  <button type="button" class="size-chip" data-size="16">16</button>
+                  <button type="button" class="size-chip" data-size="32">32</button>
+                  <button type="button" class="size-chip" data-size="48">48</button>
+                  <button type="button" class="size-chip active" data-size="64">64</button>
+                  <button type="button" class="size-chip" data-size="custom">Custom</button>
+                  <button type="button" class="size-chip" data-size="none">None</button>
+                </div>
+                <div class="custom-size" id="customSize" hidden>
+                  <input id="customW" type="number" min="1" max="1024" placeholder="W" />
+                  <span>×</span>
+                  <input id="customH" type="number" min="1" max="1024" placeholder="H" />
+                </div>
+              </div>
+              <div class="actions create-actions">
+                <button id="generateBtn" type="button">Generate</button>
+                <label class="file-btn">
+                  Upload
+                  <input id="upload" type="file" accept="image/png,image/jpeg" hidden />
+                </label>
+              </div>
+              <p class="meta upload-hint">Upload processes a local image through cutout/snap (no image model). Reference is passed to GPT Image.</p>
+              <details class="advanced">
+                <summary>Advanced</summary>
+                <div class="size-row k-row">
+                  <span>Colors (k)</span>
+                  <div class="chip-row" id="kChips">
+                    <button type="button" class="k-chip" data-k="2">2</button>
+                    <button type="button" class="k-chip" data-k="4">4</button>
+                    <button type="button" class="k-chip" data-k="8">8</button>
+                    <button type="button" class="k-chip active" data-k="16">16</button>
+                    <button type="button" class="k-chip" data-k="32">32</button>
+                    <button type="button" class="k-chip" data-k="64">64</button>
+                    <button type="button" class="k-chip" data-k="none">None</button>
+                  </div>
+                  <input id="kColors" type="hidden" value="16" />
+                </div>
+                <div class="row">
+                  <label>
+                    Pixel size
+                    <input id="pixelSize" type="number" min="1" step="1" placeholder="auto" />
+                  </label>
+                  <label>
+                    Background
+                    <select id="bgProvider">
+                      <option value="rembg_birefnet">rembg + BiRefNet</option>
+                      <option value="skip">Skip</option>
+                      <option value="remove_bg">remove.bg API</option>
+                    </select>
+                  </label>
+                </div>
+                <label class="check">
+                  <input id="wrapPrompt" type="checkbox" checked />
+                  Wrap with pixel-art style suffix
+                </label>
+              </details>
+              <p id="status" class="status" aria-live="polite"></p>
             </div>
           </div>
-          <div class="create-grid">
-            <label>
-              Colors (k)
-              <input id="kColors" type="number" min="2" max="64" value="16" />
-            </label>
-          </div>
-          <div class="actions create-actions">
-            <button id="generateBtn" type="button">Generate</button>
-            <label class="file-btn">
-              Upload
-              <input id="upload" type="file" accept="image/png,image/jpeg" hidden />
-            </label>
-          </div>
-          <details class="advanced">
-            <summary>Advanced</summary>
-            <div class="row">
-              <label>
-                Pixel size
-                <input id="pixelSize" type="number" min="1" step="1" placeholder="auto" />
-              </label>
-              <label>
-                Background
-                <select id="bgProvider">
-                  <option value="rembg_birefnet">rembg + BiRefNet</option>
-                  <option value="skip">Skip</option>
-                  <option value="remove_bg">remove.bg API</option>
-                </select>
-              </label>
-            </div>
-            <label class="check">
-              <input id="wrapPrompt" type="checkbox" checked />
-              Wrap with pixel-art style suffix
-            </label>
-          </details>
-          <p id="status" class="status" aria-live="polite"></p>
         </section>
 
         <section id="inspect" class="job-view" hidden>
@@ -194,6 +251,16 @@
           <div class="stage-strip" id="stages"></div>
         </section>
       </main>
+    </div>
+  </div>
+
+  <div id="refPickerOverlay" class="settings-overlay" hidden>
+    <div class="settings-drawer ref-picker-drawer" role="dialog" aria-modal="true" aria-labelledby="refPickerTitle">
+      <div class="editor-head">
+        <h2 id="refPickerTitle">Pick from library</h2>
+        <button type="button" id="closeRefPickerBtn" class="secondary">Cancel</button>
+      </div>
+      <div id="refPickerList" class="library-grid ref-picker-grid"></div>
     </div>
   </div>
 

@@ -14,7 +14,8 @@ client.images.edit(
 
 Possible uses in MCPixel:
 
-- **Refine**: edit from `snapped` / `edited` with a short instruction
+- **Create with reference** (v4 slice 1): Create sprite Reference slot → `images.edit` → `raw` → cutout → snap
+- **Refine**: edit from `snapped` / `edited` with a short instruction (inspector UI later)
 - **Consistency**: pass a prior sprite as reference while generating a variant
 - **Mask edit** (if supported): protect silhouette while changing colors/details
 

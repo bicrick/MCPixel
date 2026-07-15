@@ -52,9 +52,20 @@ class JobRunner:
             return text
         return f"{text}\n\n{suffix}"
 
-    def start_generate(self, req: GenerateRequest) -> JobRecord:
+    def start_generate(
+        self,
+        req: GenerateRequest,
+        reference_bytes: bytes | None = None,
+    ) -> JobRecord:
         job_id = self.store.new_id()
         bg = BgProvider.skip if req.skip_bg_remove else req.bg_provider
+        extra: dict = {}
+        if reference_bytes or req.reference_job_id:
+            extra["had_reference"] = True
+        if req.reference_job_id:
+            extra["reference_job_id"] = req.reference_job_id
+            extra["reference_stage"] = req.reference_stage or "snapped"
+
         record = JobRecord(
             id=job_id,
             status=JobStatus.queued,
@@ -71,8 +82,37 @@ class JobRunner:
             bg_provider=bg,
             target_width=req.target_width,
             target_height=req.target_height,
+            extra=extra,
         )
-        return self.store.create(record)
+        self.store.create(record)
+
+        ref_data = reference_bytes
+        if ref_data is None and req.reference_job_id:
+            ref_data = self._load_reference_job(
+                req.reference_job_id, req.reference_stage or "snapped"
+            )
+        if ref_data:
+            self.store.write_bytes(job_id, "reference", ref_data)
+            record.extra["had_reference"] = True
+            self.store.save(record)
+
+        return record
+
+    def _load_reference_job(self, job_id: str, stage: str) -> bytes:
+        allowed = {"snapped", "edited", "cutout", "raw"}
+        if stage not in allowed:
+            raise FileNotFoundError(f"Invalid reference stage: {stage}")
+        # Prefer best available if requested stage missing
+        order = [stage, "edited", "snapped", "cutout", "raw"]
+        seen: set[str] = set()
+        for s in order:
+            if s in seen:
+                continue
+            seen.add(s)
+            path = self.store.stage_path(job_id, s)
+            if path.exists():
+                return path.read_bytes()
+        raise FileNotFoundError(f"No reference image found for job {job_id}")
 
     def run_generate(self, job_id: str) -> None:
         record = self.store.get(job_id)
@@ -83,7 +123,13 @@ class JobRunner:
             self.store.set_status(record, JobStatus.generating)
             provider = self.providers.get(record.provider.value)
             prompt = record.wrapped_prompt or record.prompt
-            raw_bytes = provider.generate(prompt, self.settings)
+            ref_path = self.store.stage_path(job_id, "reference")
+            if ref_path.exists():
+                raw_bytes = provider.generate_with_reference(
+                    prompt, ref_path.read_bytes(), self.settings
+                )
+            else:
+                raw_bytes = provider.generate(prompt, self.settings)
             self.store.write_bytes(job_id, "raw", raw_bytes)
             record.stages["raw"] = True
             self.store.save(record)

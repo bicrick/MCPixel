@@ -19,7 +19,7 @@ def snap_image(
     settings: Settings,
     input_path: Path,
     output_path: Path,
-    k_colors: int = 16,
+    k_colors: int | None = 16,
     pixel_size: float | None = None,
 ) -> dict[str, float | int | None]:
     binary = Path(settings.snapper_bin)
@@ -29,11 +29,14 @@ def snap_image(
             "Build spritefusion-pixel-snapper or set SNAPPER_BIN."
         )
 
+    # Binary requires a k positional; None → default 16 (UI "None" = no user preference).
+    k = 16 if k_colors is None else int(k_colors)
+
     cmd: list[str] = [
         str(binary),
         str(input_path),
         str(output_path),
-        str(k_colors),
+        str(k),
     ]
     if pixel_size is not None:
         cmd.extend(["--pixel-size", str(pixel_size)])

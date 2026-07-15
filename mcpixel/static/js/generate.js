@@ -1,5 +1,5 @@
 import { api } from "./api.js";
-import { $, SIZE_PRESETS, state, toast } from "./state.js";
+import { $, K_PRESETS, SIZE_PRESETS, bestUrl, sortedJobs, state, toast } from "./state.js";
 
 export function syncSizeChips() {
   document.querySelectorAll(".size-chip").forEach((btn) => {
@@ -12,6 +12,20 @@ export function syncSizeChips() {
     $("customW").value = state.targetWidth || "";
     $("customH").value = state.targetHeight || "";
   }
+}
+
+export function syncKChips() {
+  document.querySelectorAll(".k-chip").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.k === state.kMode);
+  });
+  const hidden = $("kColors");
+  if (hidden) hidden.value = state.kMode === "none" ? "" : state.kMode;
+}
+
+export function readKColors() {
+  if (state.kMode === "none") return null;
+  const n = Number(state.kMode);
+  return Number.isFinite(n) ? n : 16;
 }
 
 export function readTargetSize() {
@@ -46,20 +60,133 @@ export function setTargetFromJob(job) {
     state.targetHeight = job.target_height;
     syncSizeChips();
   }
+  if (job?.k_colors == null) {
+    state.kMode = "none";
+  } else if (K_PRESETS.includes(job.k_colors)) {
+    state.kMode = String(job.k_colors);
+  } else {
+    state.kMode = "16";
+  }
+  syncKChips();
 }
 
 export function buildGenerateBody() {
   const prompt = $("prompt").value.trim();
   const pixelRaw = $("pixelSize").value;
   const size = readTargetSize();
-  return {
+  const body = {
     prompt,
-    k_colors: Number($("kColors").value) || 16,
+    k_colors: readKColors(),
     pixel_size: pixelRaw ? Number(pixelRaw) : null,
     bg_provider: $("bgProvider").value,
     wrap_prompt: $("wrapPrompt").checked,
     ...size,
   };
+  if (state.referenceJobId && !state.referenceFile) {
+    body.reference_job_id = state.referenceJobId;
+    body.reference_stage = "snapped";
+  }
+  return body;
+}
+
+function clearReferencePreviewUrl() {
+  if (state.referenceObjectUrl) {
+    URL.revokeObjectURL(state.referenceObjectUrl);
+    state.referenceObjectUrl = null;
+  }
+}
+
+function syncReferenceUi({ src = null, label = "", hasRef = false } = {}) {
+  const card = $("referenceCard");
+  const thumb = $("referenceThumb");
+  const placeholder = $("referencePlaceholder");
+  const labelEl = $("referenceLabel");
+  const clearBtn = $("clearRefBtn");
+
+  if (card) card.classList.toggle("has-ref", hasRef);
+  if (clearBtn) clearBtn.hidden = !hasRef;
+
+  if (thumb) {
+    if (src) {
+      thumb.src = src;
+      thumb.hidden = false;
+      thumb.alt = label || "Reference";
+    } else {
+      thumb.removeAttribute("src");
+      thumb.alt = "";
+      thumb.hidden = true;
+    }
+  }
+  if (placeholder) placeholder.hidden = hasRef;
+  if (labelEl) {
+    labelEl.textContent = hasRef
+      ? label
+      : "Optional — choose a file or pick from the library";
+  }
+}
+
+export function clearReference() {
+  clearReferencePreviewUrl();
+  state.referenceFile = null;
+  state.referenceJobId = null;
+  const file = $("referenceFile");
+  if (file) file.value = "";
+  syncReferenceUi({ hasRef: false });
+}
+
+export function setReferenceFile(file) {
+  clearReferencePreviewUrl();
+  state.referenceFile = file;
+  state.referenceJobId = null;
+  state.referenceObjectUrl = URL.createObjectURL(file);
+  syncReferenceUi({
+    src: state.referenceObjectUrl,
+    label: file.name || "Reference file",
+    hasRef: true,
+  });
+}
+
+export function setReferenceJob(job) {
+  clearReferencePreviewUrl();
+  state.referenceFile = null;
+  state.referenceJobId = job.id;
+  const url = bestUrl(job);
+  const prompt = (job.prompt || "").trim();
+  const label = prompt
+    ? `${prompt.slice(0, 56)}${prompt.length > 56 ? "…" : ""}`
+    : `Job ${job.id}`;
+  syncReferenceUi({
+    src: url ? `${url}?t=${Date.parse(job.updated_at || "") || 0}` : null,
+    label,
+    hasRef: true,
+  });
+}
+
+export async function refinePrompt() {
+  const el = $("prompt");
+  const prompt = el.value.trim();
+  if (!prompt) {
+    toast("Enter a prompt first.");
+    return;
+  }
+  const btn = $("refinePromptBtn");
+  btn.classList.add("busy");
+  btn.disabled = true;
+  toast("Refining prompt…");
+  try {
+    const data = await api("/v1/prompt/refine", {
+      method: "POST",
+      body: JSON.stringify({ prompt }),
+    });
+    state.promptBeforeRefine = prompt;
+    el.value = data.refined;
+    toast("Prompt refined.");
+  } catch (e) {
+    toast(e.message);
+  } finally {
+    btn.classList.remove("busy");
+    btn.disabled = false;
+  }
 }
 
 export async function generateJob() {
@@ -71,6 +198,22 @@ export async function generateJob() {
   $("generateBtn").disabled = true;
   toast("Queued…");
   try {
+    if (state.referenceFile) {
+      const fd = new FormData();
+      fd.append("prompt", body.prompt);
+      fd.append("reference", state.referenceFile);
+      if (body.k_colors == null) fd.append("k_colors", "none");
+      else fd.append("k_colors", String(body.k_colors));
+      if (body.pixel_size != null) fd.append("pixel_size", String(body.pixel_size));
+      fd.append("bg_provider", body.bg_provider);
+      fd.append("wrap_prompt", String(body.wrap_prompt));
+      if (body.target_width) fd.append("target_width", String(body.target_width));
+      if (body.target_height) fd.append("target_height", String(body.target_height));
+      const res = await fetch("/v1/generate/with-reference", { method: "POST", body: fd });
+      const job = await res.json();
+      if (!res.ok) throw new Error(job.detail || "Generate failed");
+      return job;
+    }
     return await api("/v1/generate", {
       method: "POST",
       body: JSON.stringify(body),
@@ -83,7 +226,7 @@ export async function generateJob() {
 export async function retryFromJob(job) {
   const body = {
     prompt: job.prompt,
-    k_colors: job.k_colors || 16,
+    k_colors: job.k_colors ?? null,
     pixel_size: job.pixel_size ?? null,
     bg_provider: job.bg_provider || "rembg_birefnet",
     wrap_prompt: true,
@@ -100,10 +243,12 @@ export async function retryFromJob(job) {
 export async function uploadFile(file) {
   const fd = new FormData();
   fd.append("file", file);
-  const k = Number($("kColors").value) || 16;
+  const k = readKColors();
   const px = $("pixelSize").value;
   const bg = $("bgProvider").value;
-  let url = `/v1/process?k_colors=${k}&bg_provider=${bg}`;
+  let url = `/v1/process?bg_provider=${bg}`;
+  if (k != null) url += `&k_colors=${k}`;
+  else url += `&k_colors=16`;
   if (px) url += `&pixel_size=${px}`;
   toast("Processing upload…");
   const res = await fetch(url, { method: "POST", body: fd });
@@ -133,6 +278,62 @@ export function bindSizeChips() {
   syncSizeChips();
 }
 
+export function bindKChips() {
+  document.querySelectorAll(".k-chip").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.kMode = btn.dataset.k;
+      syncKChips();
+    });
+  });
+  syncKChips();
+}
+
+export function bindReferenceControls({ onPickJob } = {}) {
+  $("referenceFile")?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (file) setReferenceFile(file);
+  });
+  $("clearRefBtn")?.addEventListener("click", clearReference);
+  $("pickRefJobBtn")?.addEventListener("click", () => onPickJob?.());
+  $("refinePromptBtn")?.addEventListener("click", () => refinePrompt());
+}
+
+export function openRefPicker() {
+  const overlay = $("refPickerOverlay");
+  const list = $("refPickerList");
+  if (!overlay || !list) return;
+  const jobs = sortedJobs().filter((j) => j.status === "completed" && bestUrl(j));
+  if (!jobs.length) {
+    list.innerHTML = `<p class="queue-empty">No completed sprites in the library yet.</p>`;
+  } else {
+    list.innerHTML = jobs
+      .map((j) => {
+        const src = bestUrl(j);
+        const caption = (j.prompt || j.id || "").slice(0, 40).replace(/</g, "&lt;");
+        return `
+          <button type="button" class="library-item" data-ref-job="${j.id}" title="${(j.prompt || j.id || "").replace(/"/g, "&quot;")}">
+            <img src="${src}?t=1" alt="" />
+            <span class="library-caption">${caption}</span>
+          </button>
+        `;
+      })
+      .join("");
+    list.querySelectorAll("[data-ref-job]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const job = state.jobsById.get(btn.dataset.refJob);
+        if (job) setReferenceJob(job);
+        closeRefPicker();
+      });
+    });
+  }
+  overlay.hidden = false;
+}
+
+export function closeRefPicker() {
+  const overlay = $("refPickerOverlay");
+  if (overlay) overlay.hidden = true;
+}
+
 export function bindCreateDrop(onFile) {
   const pane = document.querySelector(".create-view");
   if (!pane) return;
@@ -146,5 +347,33 @@ export function bindCreateDrop(onFile) {
     pane.classList.remove("drag-over");
     const file = e.dataTransfer?.files?.[0];
     if (file) onFile(file);
+  });
+}
+
+export function bindCreateMenu({ onCreateSprite } = {}) {
+  const btn = $("newBtn");
+  if (!btn) return;
+  btn.addEventListener("click", () => {
+    if (btn.disabled || state.mainMode === "create") return;
+    onCreateSprite?.();
+  });
+
+  document.querySelectorAll(".create-mode-tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      if (tab.disabled) return;
+      document.querySelectorAll(".create-mode-tab").forEach((t) => {
+        const on = t === tab;
+        t.classList.toggle("active", on);
+        t.setAttribute("aria-selected", on ? "true" : "false");
+      });
+      const title = $("createModeTitle");
+      const meta = $("createModeMeta");
+      if (tab.dataset.createMode === "sprite") {
+        if (title) title.textContent = "Create sprite";
+        if (meta) {
+          meta.textContent = "Target size is a prompt hint — cutout and snap stay the same.";
+        }
+      }
+    });
   });
 }

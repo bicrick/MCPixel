@@ -28,6 +28,7 @@ class Settings(BaseSettings):
     snapper_bin: Path = DEFAULT_SNAPPER
     openai_api_key: str | None = None
     openai_image_model: str = "gpt-image-1"
+    openai_text_model: str = "gpt-5-nano"
     rembg_model: str = "birefnet-general"
     alpha_harden_threshold: int = 128
     public_base_url: str = "http://127.0.0.1:8787"

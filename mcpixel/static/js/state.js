@@ -23,6 +23,7 @@ export const STATUS_LABELS = {
 };
 
 export const SIZE_PRESETS = [16, 32, 48, 64];
+export const K_PRESETS = [2, 4, 8, 16, 32, 64];
 
 /** Discrete stage weights — no streaming % from providers. */
 export const PROGRESS_BY_STATUS = {
@@ -37,7 +38,8 @@ export const PROGRESS_BY_STATUS = {
 export const state = {
   currentJobId: null,
   mainMode: "empty", // empty | create | job
-  railTab: "queue", // queue | projects
+  railTab: "queue", // queue | library | projects
+  lastLibraryFp: null,
   jobsById: new Map(),
   projects: [],
   activeProjectId: null, // null = list; "unfiled" | project id when drilled in
@@ -47,6 +49,11 @@ export const state = {
   targetMode: "64",
   targetWidth: 64,
   targetHeight: 64,
+  kMode: "16", // "none" | "2"|"4"|...
+  referenceFile: null,
+  referenceJobId: null,
+  referenceObjectUrl: null,
+  promptBeforeRefine: null,
   menuJobId: null,
   menuMode: "job", // job | project-pick
   lastQueueFp: null,
@@ -186,6 +193,12 @@ export function setMainMode(mode) {
   if (empty) empty.hidden = mode !== "empty";
   if (create) create.hidden = mode !== "create";
   if (inspect) inspect.hidden = mode !== "job";
+  const newBtn = $("newBtn");
+  if (newBtn) {
+    const onCreate = mode === "create";
+    newBtn.disabled = onCreate;
+    newBtn.setAttribute("aria-disabled", onCreate ? "true" : "false");
+  }
 }
 
 export function setRailTab(tab) {
@@ -196,8 +209,10 @@ export function setRailTab(tab) {
     btn.classList.toggle("active", btn.dataset.rail === tab);
   });
   const queuePane = document.querySelector(".queue-pane");
+  const libraryPane = document.querySelector(".library-pane");
   const projectsPane = document.querySelector(".projects-pane");
   if (queuePane) queuePane.hidden = tab !== "queue";
+  if (libraryPane) libraryPane.hidden = tab !== "library";
   if (projectsPane) projectsPane.hidden = tab !== "projects";
 }
 

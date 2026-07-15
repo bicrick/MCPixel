@@ -12,6 +12,12 @@ class ImageProvider(ABC):
     def generate(self, prompt: str, settings: Settings) -> bytes:
         """Return PNG bytes for the given prompt."""
 
+    def generate_with_reference(
+        self, prompt: str, image_bytes: bytes, settings: Settings
+    ) -> bytes:
+        raise NotImplementedError(
+            f"Provider {self.name} does not support reference images"
+        )
 
 class ProviderRegistry:
     def __init__(self) -> None:

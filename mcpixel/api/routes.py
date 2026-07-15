@@ -16,6 +16,7 @@ from mcpixel.jobs.models import (
 from mcpixel.jobs.runner import JobRunner
 from mcpixel.jobs.store import JobStore
 from mcpixel.projects import ProjectStore
+from mcpixel.providers.openai_text import refine_pixel_prompt
 from mcpixel.settings_store import (
     AppSettingsFile,
     SettingsUpdate,
@@ -92,6 +93,24 @@ def update_settings(body: SettingsUpdate, request: Request) -> dict:
     return public_settings_view(settings)
 
 
+class PromptRefineRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+
+
+@router.post("/prompt/refine")
+def refine_prompt(body: PromptRefineRequest, request: Request) -> dict:
+    settings = _settings(request)
+    if not settings.openai_api_key:
+        raise HTTPException(503, "OpenAI API key not configured")
+    try:
+        refined = refine_pixel_prompt(body.prompt, settings)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(502, str(exc)) from exc
+    return {"refined": refined}
+
+
 @router.post("/generate")
 def generate(
     body: GenerateRequest,
@@ -99,7 +118,58 @@ def generate(
     request: Request,
 ) -> dict:
     runner = _runner(request)
-    record = runner.start_generate(body)
+    try:
+        record = runner.start_generate(body)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    background_tasks.add_task(runner.run_generate, record.id)
+    return enrich(record, _settings(request).public_base_url, _projects(request))
+
+
+@router.post("/generate/with-reference")
+async def generate_with_reference(
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> dict:
+    """Multipart generate: form fields + reference image file."""
+    form = await request.form()
+    prompt_text = str(form.get("prompt") or "").strip()
+    if not prompt_text:
+        raise HTTPException(400, "prompt required")
+    ref_file = form.get("reference")
+    if not hasattr(ref_file, "read"):
+        raise HTTPException(400, "reference file required")
+    ref_bytes = await ref_file.read()  # type: ignore[union-attr]
+    if not ref_bytes:
+        raise HTTPException(400, "Empty reference image")
+
+    k_raw = form.get("k_colors")
+    if k_raw is None or k_raw == "" or str(k_raw).lower() == "none":
+        k_val: int | None = None
+    else:
+        k_val = int(str(k_raw))
+
+    px_raw = form.get("pixel_size")
+    px_val = float(str(px_raw)) if px_raw not in (None, "") else None
+    wrap = str(form.get("wrap_prompt", "true")).lower() in {"1", "true", "yes"}
+    bg = BgProvider(str(form.get("bg_provider") or BgProvider.rembg_birefnet.value))
+    tw = form.get("target_width")
+    th = form.get("target_height")
+    try:
+        body = GenerateRequest(
+            prompt=prompt_text,
+            k_colors=k_val,
+            pixel_size=px_val,
+            bg_provider=bg,
+            wrap_prompt=wrap,
+            target_width=int(str(tw)) if tw not in (None, "") else None,
+            target_height=int(str(th)) if th not in (None, "") else None,
+        )
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    runner = _runner(request)
+    record = runner.start_generate(body, reference_bytes=ref_bytes)
     background_tasks.add_task(runner.run_generate, record.id)
     return enrich(record, _settings(request).public_base_url, _projects(request))
 

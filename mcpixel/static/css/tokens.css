@@ -19,7 +19,9 @@
   --cta: #e6c35c;
   --cta-ink: #12100a;
   --radius: 0;
-  --rail-width: 320px;
+  --rail-width: clamp(280px, 28vw, 420px);
+  --workspace-max: min(1400px, 100%);
+  --create-max: min(1280px, 100%);
   --topbar-h: 48px;
   --font-ui: "IBM Plex Mono", ui-monospace, monospace;
   --font-display: "Pixelify Sans", "IBM Plex Mono", monospace;
