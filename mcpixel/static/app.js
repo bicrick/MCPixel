@@ -58,6 +58,7 @@ import {
 } from "./js/projects.js";
 import { bindSettings, closeSettings } from "./js/settings.js";
 import { bindInfoTips } from "./js/tooltips.js";
+import { confirmDialog, promptDialog } from "./js/dialogs.js";
 
 const queueHandlers = {
   onSelect: (id) => selectJob(id, { fromLibrary: false }),
@@ -80,6 +81,7 @@ const queueHandlers = {
 const libraryHandlers = {
   ...queueHandlers,
   onSelect: (id) => selectJob(id, { fromLibrary: true }),
+  onDropJob: (projectId, jobId) => handleDropJobOnProject(projectId, jobId),
 };
 
 function refreshLibraryChrome() {
@@ -187,11 +189,28 @@ async function afterNewJob(job) {
   updateActiveBadge();
 }
 
+async function handleDropJobOnProject(projectId, jobId) {
+  try {
+    await addJobToProject(projectId, jobId);
+    await loadProjects();
+    renderQueue(queueHandlers);
+    refreshLibraryChrome();
+    const project = state.projects.find((p) => p.id === projectId);
+    toast(`Added to ${project?.name || "project"}.`);
+  } catch (e) {
+    toast(e.message);
+  }
+}
+
 async function handleMenuAction(action, jobId, projectId) {
   try {
     if (action === "rename-project" && projectId) {
       const current = state.projects.find((p) => p.id === projectId);
-      const name = prompt("Rename project", current?.name || "");
+      const name = await promptDialog("Enter a new name for this project.", current?.name || "", {
+        title: "Rename project",
+        confirmLabel: "Rename",
+        fieldLabel: "Name",
+      });
       if (!name?.trim()) return;
       await renameProject(projectId, name.trim());
       refreshLibraryChrome();
@@ -200,9 +219,11 @@ async function handleMenuAction(action, jobId, projectId) {
     }
     if (action === "delete-project" && projectId) {
       const current = state.projects.find((p) => p.id === projectId);
-      if (!confirm(`Delete project “${current?.name || projectId}”? Jobs stay in the queue.`)) {
-        return;
-      }
+      const ok = await confirmDialog(
+        `Delete project “${current?.name || projectId}”? Jobs stay in the queue.`,
+        { title: "Delete project", confirmLabel: "Delete", danger: true }
+      );
+      if (!ok) return;
       await deleteProject(projectId);
       if (state.libraryFilter === projectId) state.libraryFilter = "all";
       refreshLibraryChrome();
@@ -266,7 +287,12 @@ async function handleMenuAction(action, jobId, projectId) {
       return;
     }
     if (action === "delete") {
-      if (!confirm(`Delete job permanently?\n${job.prompt || jobId}`)) return;
+      const ok = await confirmDialog(`Delete job permanently?\n${job.prompt || jobId}`, {
+        title: "Delete job",
+        confirmLabel: "Delete",
+        danger: true,
+      });
+      if (!ok) return;
       await deleteJob(jobId);
       if (state.currentJobId === jobId) {
         if (state.libraryReturn) {
@@ -289,7 +315,12 @@ async function handleMenuAction(action, jobId, projectId) {
 }
 
 async function handleClearFailed() {
-  if (!confirm("Delete all failed jobs?")) return;
+  const ok = await confirmDialog("Delete all failed jobs?", {
+    title: "Clear failed",
+    confirmLabel: "Clear",
+    danger: true,
+  });
+  if (!ok) return;
   try {
     await clearFailedJobs();
     if (state.currentJobId && !state.jobsById.has(state.currentJobId)) {
@@ -457,7 +488,11 @@ function bindUi() {
   });
 
   document.addEventListener("click", (e) => {
-    if (!e.target.closest(".menu-popover") && !e.target.closest(".menu-btn")) {
+    if (
+      !e.target.closest(".menu-popover") &&
+      !e.target.closest(".menu-submenu") &&
+      !e.target.closest(".menu-btn")
+    ) {
       closeJobMenu();
     }
   });

@@ -15,7 +15,9 @@
   <div class="app" data-main="empty" data-rail-tab="queue">
     <header class="topbar">
       <div class="topbar-brand">
-        <span class="brand">MCPixel</span>
+        <span class="brand" aria-label="MCPixel">
+          <span class="brand-mcp">MCP</span><span class="brand-ixel">ixel</span>
+        </span>
         <span class="topbar-tag">Local pixel suite</span>
       </div>
       <div class="topbar-right">
@@ -105,17 +107,23 @@
             <div class="create-main-col">
               <div class="prompt-field">
                 <div class="prompt-field-head">
-                  <span>Prompt</span>
+                  <span class="field-label">
+                    Prompt
+                    <button type="button" class="info-tip" data-tip="Describe the sprite you want. Be concrete about view, palette, and shape. Use ✦ to polish the wording with AI." aria-label="About Prompt">i</button>
+                  </span>
                 </div>
                 <div class="prompt-wrap">
                   <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
-                  <button type="button" id="refinePromptBtn" class="refine-btn" title="Refine prompt with AI" aria-label="Refine prompt">✦</button>
+                  <button type="button" id="refinePromptBtn" class="refine-btn" data-tip="Refine prompt with AI" data-tip-mode="hover" aria-label="Refine prompt with AI">✦</button>
                 </div>
               </div>
               <div class="reference-row">
                 <div class="reference-head">
-                  <span>Reference image</span>
-                  <span class="meta-inline">Optional reference for GPT Image</span>
+                  <span class="field-label">
+                    Reference image
+                    <button type="button" class="info-tip" data-tip="Optional. Sends an image with your prompt so GPT Image can match style or pose (images.edit). Pick from library, disk, or clipboard." aria-label="About Reference image">i</button>
+                  </span>
+                  <span class="meta-inline">Optional</span>
                 </div>
                 <div class="reference-card" id="referenceCard">
                   <div class="reference-thumb-wrap" id="referenceThumbWrap">
@@ -142,7 +150,10 @@
             </div>
             <div class="create-side-col">
               <div class="size-row">
-                <span>Target size (prompt hint)</span>
+                <span class="field-label">
+                  Target size (prompt hint)
+                  <button type="button" class="info-tip" data-tip="Hint only — baked into the prompt text. Does not resize the final snap. Cutout and pixel snap still decide output size." aria-label="About Target size">i</button>
+                </span>
                 <div class="chip-row" id="sizeChips">
                   <button type="button" class="size-chip" data-size="16">16</button>
                   <button type="button" class="size-chip" data-size="32">32</button>
@@ -163,7 +174,10 @@
               <details class="advanced">
                 <summary>Advanced</summary>
                 <div class="size-row k-row">
-                  <span>Colors (k)</span>
+                  <span class="field-label">
+                    Colors (k)
+                    <button type="button" class="info-tip" data-tip="Palette size after snap (2–64). Lower = fewer colors, flatter look. None skips forcing a fixed k." aria-label="About Colors k">i</button>
+                  </span>
                   <div class="chip-row" id="kChips">
                     <button type="button" class="k-chip" data-k="2">2</button>
                     <button type="button" class="k-chip" data-k="4">4</button>
@@ -177,11 +191,17 @@
                 </div>
                 <div class="row">
                   <label>
-                    Pixel size
+                    <span class="field-label">
+                      Pixel size
+                      <button type="button" class="info-tip" data-tip="Source pixels per output pixel. Lower = finer detail / larger canvas. Leave empty to auto-detect from the cutout." aria-label="About Pixel size">i</button>
+                    </span>
                     <input id="pixelSize" type="number" min="1" step="1" placeholder="auto" />
                   </label>
                   <label>
-                    Background
+                    <span class="field-label">
+                      Background
+                      <button type="button" class="info-tip" data-tip="How to cut the subject from the background before snap. rembg+BiRefNet is local; remove.bg needs an API key; Skip keeps the raw plate." aria-label="About Background">i</button>
+                    </span>
                     <select id="bgProvider">
                       <option value="rembg_birefnet">rembg + BiRefNet</option>
                       <option value="skip">Skip</option>
@@ -191,7 +211,10 @@
                 </div>
                 <label class="check">
                   <input id="wrapPrompt" type="checkbox" checked />
-                  Wrap with pixel-art style suffix
+                  <span class="field-label">
+                    Wrap with pixel-art style suffix
+                    <button type="button" class="info-tip" data-tip="Appends a short pixel-art style note to your prompt so generations stay sprite-like. Turn off if your prompt already covers style." aria-label="About wrap suffix">i</button>
+                  </span>
                 </label>
               </details>
               <p id="status" class="status" aria-live="polite"></p>
@@ -316,6 +339,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/app.js"></script>
+  <script type="module" src="/static/app.js?v=dialogs-tips"></script>
 </body>
 </html>

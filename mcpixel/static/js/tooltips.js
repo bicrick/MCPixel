@@ -59,7 +59,7 @@ function hideTip(btn) {
 
 export function bindInfoTips(root = document) {
   ensureTip();
-  root.querySelectorAll(".info-tip[data-tip]").forEach((btn) => {
+  root.querySelectorAll(".info-tip[data-tip], [data-tip][data-tip-mode='hover']").forEach((btn) => {
     if (btn.dataset.tipBound) return;
     btn.dataset.tipBound = "1";
     btn.setAttribute("aria-expanded", "false");
@@ -68,6 +68,8 @@ export function bindInfoTips(root = document) {
     btn.addEventListener("focus", () => showTip(btn));
     btn.addEventListener("blur", () => hideTip(btn));
     btn.addEventListener("click", (e) => {
+      // Don't steal clicks from action buttons that only show tip on hover
+      if (btn.dataset.tipMode === "hover") return;
       e.preventDefault();
       if (activeBtn === btn && !ensureTip().hidden) hideTip(btn);
       else showTip(btn);

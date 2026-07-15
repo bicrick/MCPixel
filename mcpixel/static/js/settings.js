@@ -1,4 +1,5 @@
 import { api } from "./api.js";
+import { confirmDialog } from "./dialogs.js";
 import { $, toast } from "./state.js";
 
 export async function openSettings() {
@@ -62,7 +63,12 @@ export async function saveSettings() {
 }
 
 export async function clearOpenaiKey() {
-  if (!confirm("Clear stored OpenAI API key?")) return null;
+  const ok = await confirmDialog("Clear stored OpenAI API key?", {
+    title: "Clear OpenAI key",
+    confirmLabel: "Clear",
+    danger: true,
+  });
+  if (!ok) return null;
   const view = await api("/v1/settings", {
     method: "PUT",
     body: JSON.stringify({ clear_openai_api_key: true }),

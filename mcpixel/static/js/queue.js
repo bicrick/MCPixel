@@ -36,6 +36,21 @@ export function closeJobMenu() {
   });
 }
 
+function projectPickButtons(jobId) {
+  const job = state.jobsById.get(jobId);
+  const memberOf = new Set(job?.project_ids || []);
+  const available = state.projects.filter((p) => !memberOf.has(p.id));
+  const picks = available.length
+    ? available
+        .map(
+          (p) =>
+            `<button type="button" data-action="pick-project" data-project-id="${p.id}">${escapeHtml(p.name)}</button>`
+        )
+        .join("")
+    : `<p class="menu-empty">${state.projects.length ? "Already in every project" : "No projects yet"}</p>`;
+  return `${picks}<button type="button" data-action="create-then-add">New project…</button>`;
+}
+
 function fillJobMenu(jobId) {
   const menu = ensureMenu();
   const job = state.jobsById.get(jobId);
@@ -54,25 +69,58 @@ function fillJobMenu(jobId) {
     <button type="button" data-action="resnap">Resnap</button>
     <button type="button" data-action="copy">Copy prompt</button>
     <button type="button" data-action="download">Download</button>
-    <button type="button" data-action="add-project">Add to project…</button>
+    <div class="menu-sub-wrap">
+      <button type="button" data-action="add-project" aria-haspopup="true" aria-expanded="false">Add to project…</button>
+      <div class="menu-submenu" hidden role="menu">${projectPickButtons(jobId)}</div>
+    </div>
     ${membership}
     <button type="button" data-action="delete" class="danger">Delete</button>
   `;
+  bindProjectSubmenu(menu);
 }
 
-function fillProjectPickMenu() {
+function positionSubmenu(_wrap) {
+  // Inline submenu — no positioning needed
+}
+
+function openProjectSubmenu(wrap) {
+  const sub = wrap?.querySelector(".menu-submenu");
+  const trigger = wrap?.querySelector("[data-action='add-project']");
+  if (!sub) return;
+  sub.hidden = false;
+  trigger?.setAttribute("aria-expanded", "true");
+}
+
+function closeProjectSubmenu(wrap) {
+  const sub = wrap?.querySelector(".menu-submenu");
+  const trigger = wrap?.querySelector("[data-action='add-project']");
+  if (sub) sub.hidden = true;
+  trigger?.setAttribute("aria-expanded", "false");
+}
+
+function bindProjectSubmenu(menu) {
+  const wrap = menu.querySelector(".menu-sub-wrap");
+  if (!wrap) return;
+  let leaveTimer = null;
+  const clearLeave = () => {
+    if (leaveTimer) {
+      clearTimeout(leaveTimer);
+      leaveTimer = null;
+    }
+  };
+  wrap.addEventListener("mouseenter", () => {
+    clearLeave();
+    openProjectSubmenu(wrap);
+  });
+  wrap.addEventListener("mouseleave", () => {
+    clearLeave();
+    leaveTimer = setTimeout(() => closeProjectSubmenu(wrap), 180);
+  });
+}
+
+function fillProjectPickMenu(jobId = state.menuJobId) {
   const menu = ensureMenu();
-  if (!state.projects.length) {
-    menu.innerHTML = `<button type="button" data-action="create-then-add">New project…</button>`;
-    return;
-  }
-  menu.innerHTML = [
-    ...state.projects.map(
-      (p) =>
-        `<button type="button" data-action="pick-project" data-project-id="${p.id}">${escapeHtml(p.name)}</button>`
-    ),
-    `<button type="button" data-action="create-then-add">New project…</button>`,
-  ].join("");
+  menu.innerHTML = projectPickButtons(jobId);
 }
 
 function fillProjectActionsMenu(projectId) {
@@ -90,7 +138,7 @@ export function openJobMenu(jobId, anchor) {
   state.menuMode = "job";
   fillJobMenu(jobId);
   menu.hidden = false;
-  menu.style.top = `${Math.min(window.innerHeight - 260, rect.bottom + 4)}px`;
+  menu.style.top = `${Math.min(window.innerHeight - 320, rect.bottom + 4)}px`;
   menu.style.left = `${Math.max(8, Math.min(window.innerWidth - 180, rect.right - 160))}px`;
   anchor.setAttribute("aria-expanded", "true");
 }
@@ -280,11 +328,13 @@ function wireMenu(handlers) {
     const action = btn.dataset.action;
     const projectId = btn.dataset.projectId || null;
     const jobId = state.menuJobId;
-    if (action === "add-project" && jobId) {
-      state.menuMode = "project-pick";
-      fillProjectPickMenu();
+    if (action === "add-project") {
+      e.preventDefault();
+      e.stopPropagation();
+      openProjectSubmenu(btn.closest(".menu-sub-wrap"));
       return;
     }
+    e.stopPropagation();
     closeJobMenu();
     handlers?.onMenuAction?.(action, jobId, projectId);
   };

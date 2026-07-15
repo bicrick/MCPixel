@@ -12,7 +12,7 @@ body {
   overflow: hidden;
 }
 
-h1, h2, .brand, .empty-title {
+h1, h2, .empty-title {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: 0.02em;

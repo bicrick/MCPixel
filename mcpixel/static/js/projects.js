@@ -1,4 +1,5 @@
 import { api, escapeHtml } from "./api.js";
+import { promptDialog } from "./dialogs.js";
 import {
   $,
   STATUS_LABELS,
@@ -9,7 +10,6 @@ import {
   sortedJobs,
   state,
   toast,
-  unfiledJobs,
 } from "./state.js";
 
 export async function loadProjects() {
@@ -113,14 +113,14 @@ export function renderProjectsPane(handlers = {}) {
   if (state.activeProjectId) {
     list.hidden = true;
     jobsEl.hidden = false;
-    const isUnfiled = state.activeProjectId === "unfiled";
-    const project = isUnfiled
-      ? null
-      : state.projects.find((p) => p.id === state.activeProjectId);
-    const jobs = isUnfiled
-      ? unfiledJobs()
-      : sortedJobs().filter((j) => (project?.job_ids || []).includes(j.id));
-    const title = isUnfiled ? "Unfiled" : project?.name || "Project";
+    if (state.activeProjectId === "unfiled") {
+      state.activeProjectId = null;
+      renderProjectsPane(handlers);
+      return;
+    }
+    const project = state.projects.find((p) => p.id === state.activeProjectId);
+    const jobs = sortedJobs().filter((j) => (project?.job_ids || []).includes(j.id));
+    const title = project?.name || "Project";
     jobsEl.innerHTML = `
       <div class="queue-head-row">
         <button type="button" class="secondary topbar-btn" data-back>← Back</button>
@@ -142,18 +142,8 @@ export function renderProjectsPane(handlers = {}) {
 
   list.hidden = false;
   jobsEl.hidden = true;
-  const unfiled = unfiledJobs();
-  const rows = [
-    `
-    <div class="project-item">
-      <button class="project-row" type="button" data-open="unfiled">
-        <span class="project-name">Unfiled</span>
-        <span class="project-count">${unfiled.length} job${unfiled.length === 1 ? "" : "s"}</span>
-      </button>
-    </div>
-    `,
-    ...state.projects.map(
-      (p) => `
+  const rows = state.projects.map(
+    (p) => `
       <div class="project-item">
         <button class="project-row" type="button" data-open="${p.id}">
           <span class="project-name">${escapeHtml(p.name)}</span>
@@ -162,8 +152,7 @@ export function renderProjectsPane(handlers = {}) {
         <button class="menu-btn" type="button" data-project-menu="${p.id}" aria-label="Project actions">⋯</button>
       </div>
     `
-    ),
-  ];
+  );
   list.innerHTML = rows.join("") || `<p class="queue-empty">No projects yet.</p>`;
 
   list.querySelectorAll("[data-open]").forEach((btn) => {
@@ -181,7 +170,11 @@ export function renderProjectsPane(handlers = {}) {
 }
 
 export async function promptNewProject() {
-  const name = prompt("Project name");
+  const name = await promptDialog("Name your project.", "", {
+    title: "New project",
+    confirmLabel: "Create",
+    fieldLabel: "Name",
+  });
   if (!name?.trim()) return null;
   try {
     const project = await createProject(name.trim());
