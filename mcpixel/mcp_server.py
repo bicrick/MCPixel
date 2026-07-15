@@ -107,6 +107,8 @@ def resnap(
     pixel_size: float | None = None,
 ) -> dict[str, Any]:
     """Re-run pixel snapper on an existing cutout (no new image generation)."""
+    import time
+
     _check_health()
     with _client() as client:
         r = client.post(
@@ -114,7 +116,15 @@ def resnap(
             json={"k_colors": k_colors, "pixel_size": pixel_size},
         )
         r.raise_for_status()
-        return r.json()
+        job = r.json()
+        for _ in range(60):
+            if job.get("status") in {"completed", "failed"}:
+                break
+            time.sleep(0.25)
+            r = client.get(f"/v1/jobs/{job_id}")
+            r.raise_for_status()
+            job = r.json()
+        return job
 
 
 @mcp.tool()

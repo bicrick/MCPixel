@@ -195,11 +195,21 @@ function patchStages(job) {
         const next = document.createElement("img");
         next.alt = name;
         next.dataset.url = url;
+        next.dataset.bust = String(bust);
         next.src = `${url}?t=${bust}`;
         article.appendChild(next);
-      } else if (img.dataset.url !== url) {
+      } else if (img.dataset.url !== url || img.dataset.bust !== String(bust)) {
         img.dataset.url = url;
+        img.dataset.bust = String(bust);
         img.src = `${url}?t=${bust}`;
+      }
+    } else if (img) {
+      img.remove();
+      if (!article.querySelector(".stage-empty")) {
+        const empty = document.createElement("div");
+        empty.className = "stage-empty";
+        empty.textContent = "Waiting…";
+        article.appendChild(empty);
       }
     }
   }
@@ -219,14 +229,20 @@ function scaleHeroImage(img) {
 }
 
 function mountHero(job) {
-  const url = bestUrl(job);
   const frame = $("heroFrame");
   const download = $("downloadBtn");
+  if (isActive(job.status)) {
+    frame.innerHTML = `<p class="meta hero-placeholder">Working — ${escapeHtml(STATUS_LABELS[job.status] || job.status)}…</p>`;
+    download.hidden = true;
+    return;
+  }
+  const url = bestUrl(job);
+  const bust = cacheBust(job);
   if (url) {
-    frame.innerHTML = `<img alt="Result preview" data-url="${url}" />`;
+    frame.innerHTML = `<img alt="Result preview" data-url="${url}" data-bust="${bust}" />`;
     const img = frame.querySelector("img");
     img.onload = () => scaleHeroImage(img);
-    img.src = `${url}?t=${cacheBust(job)}`;
+    img.src = `${url}?t=${bust}`;
     download.hidden = false;
     download.href = url;
     download.download = `${job.id}_best.png`;
@@ -234,18 +250,37 @@ function mountHero(job) {
     frame.innerHTML = `<p class="meta hero-placeholder">Failed${job.error ? `: ${escapeHtml(job.error)}` : ""}</p>`;
     download.hidden = true;
   } else {
-    frame.innerHTML = `<p class="meta hero-placeholder">Working — ${escapeHtml(STATUS_LABELS[job.status] || job.status)}…</p>`;
+    frame.innerHTML = `<p class="meta hero-placeholder">Waiting for output…</p>`;
     download.hidden = true;
   }
 }
 
 function patchHero(job) {
-  const url = bestUrl(job);
   const frame = $("heroFrame");
   const download = $("downloadBtn");
+  if (isActive(job.status)) {
+    const text = `Working — ${STATUS_LABELS[job.status] || job.status}…`;
+    const placeholder = frame.querySelector(".hero-placeholder");
+    const img = frame.querySelector("img");
+    if (img || !placeholder || placeholder.textContent !== text) {
+      frame.innerHTML = `<p class="meta hero-placeholder">${escapeHtml(text)}</p>`;
+    }
+    download.hidden = true;
+    return;
+  }
+  const url = bestUrl(job);
+  const bust = cacheBust(job);
   const img = frame.querySelector("img");
   if (url) {
+    if (img && img.dataset.url === url && img.dataset.bust === String(bust)) {
+      download.hidden = false;
+      download.href = url;
+      return;
+    }
     if (img && img.dataset.url === url) {
+      img.dataset.bust = String(bust);
+      img.onload = () => scaleHeroImage(img);
+      img.src = `${url}?t=${bust}`;
       download.hidden = false;
       download.href = url;
       return;
@@ -253,20 +288,9 @@ function patchHero(job) {
     mountHero(job);
     return;
   }
-  if (img) {
+  if (img || job.status === "failed" || !frame.querySelector(".hero-placeholder")) {
     mountHero(job);
     return;
-  }
-  const placeholder = frame.querySelector(".hero-placeholder");
-  if (job.status === "failed") {
-    const text = `Failed${job.error ? `: ${job.error}` : ""}`;
-    if (!placeholder || placeholder.textContent !== text) mountHero(job);
-  } else {
-    const text = `Working — ${STATUS_LABELS[job.status] || job.status}…`;
-    if (!placeholder || placeholder.textContent !== text) {
-      if (placeholder) placeholder.textContent = text;
-      else mountHero(job);
-    }
   }
   download.hidden = true;
 }

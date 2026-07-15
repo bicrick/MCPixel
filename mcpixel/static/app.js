@@ -57,6 +57,7 @@ import {
   renameProject,
 } from "./js/projects.js";
 import { bindSettings, closeSettings } from "./js/settings.js";
+import { bindInfoTips } from "./js/tooltips.js";
 
 const queueHandlers = {
   onSelect: (id) => selectJob(id, { fromLibrary: false }),
@@ -306,11 +307,16 @@ async function handleClearFailed() {
 
 async function resnap() {
   if (!state.currentJobId) return;
-  const pixelRaw = $("resnapPx").value;
+  const pixelRaw = $("resnapPx").value.trim();
+  const kRaw = $("resnapK").value.trim();
   const body = {
-    k_colors: Number($("resnapK").value) || 16,
-    pixel_size: pixelRaw ? Number(pixelRaw) : null,
+    k_colors: kRaw === "" ? null : Number(kRaw) || 16,
+    pixel_size: pixelRaw === "" ? null : Number(pixelRaw),
   };
+  if (body.pixel_size != null && !(body.pixel_size > 0)) {
+    toast("Pixel size must be a positive number, or empty for auto.");
+    return;
+  }
   toast("Resnapping…");
   $("resnapBtn").disabled = true;
   try {
@@ -318,16 +324,22 @@ async function resnap() {
       method: "POST",
       body: JSON.stringify(body),
     });
-    renderJob(job, queueHandlers);
-    toast("Resnap done.");
+    upsertJob(job);
+    state.lastJobFp = null;
+    renderJob(job, queueHandlers, { force: true });
+    ensurePolling();
+    updateActiveBadge();
   } catch (e) {
     toast(e.message);
-  } finally {
     const job = state.jobsById.get(state.currentJobId);
     if (job) {
-      $("resnapBtn").disabled = !job.urls?.cutout;
+      $("resnapBtn").disabled = !job.urls?.cutout || isActiveStatus(job.status);
     }
   }
+}
+
+function isActiveStatus(status) {
+  return ["queued", "generating", "removing_background", "snapping"].includes(status);
 }
 
 function openCreateWorkspace() {
@@ -347,6 +359,7 @@ function bindUi() {
   bindKChips();
   bindEditorEvents();
   bindSettings(() => loadHealth());
+  bindInfoTips();
   bindCreateDrop((file) => {
     setReferenceFile(file);
     toast("Reference set from drop.");

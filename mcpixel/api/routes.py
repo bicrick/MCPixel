@@ -221,13 +221,19 @@ def get_stage(job_id: str, stage: str, request: Request) -> FileResponse:
 
 
 @router.post("/jobs/{job_id}/resnap")
-def resnap(job_id: str, body: ResnapRequest, request: Request) -> dict:
+def resnap(
+    job_id: str,
+    body: ResnapRequest,
+    background_tasks: BackgroundTasks,
+    request: Request,
+) -> dict:
     try:
-        job = _runner(request).resnap(job_id, body)
+        job = _runner(request).start_resnap(job_id, body)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(500, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    background_tasks.add_task(_runner(request).run_resnap, job_id)
     return enrich(job, _settings(request).public_base_url, _projects(request))
 
 

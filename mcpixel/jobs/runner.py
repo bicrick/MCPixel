@@ -154,7 +154,7 @@ class JobRunner:
                 stage_error=record.status.value,
             )
 
-    def resnap(self, job_id: str, req: ResnapRequest) -> JobRecord:
+    def start_resnap(self, job_id: str, req: ResnapRequest) -> JobRecord:
         record = self.store.get(job_id)
         if record is None:
             raise FileNotFoundError(f"Job not found: {job_id}")
@@ -163,21 +163,61 @@ class JobRunner:
         if not cutout.exists():
             raise FileNotFoundError("cutout.png missing; cannot resnap")
 
+        if record.status in {
+            JobStatus.queued,
+            JobStatus.generating,
+            JobStatus.removing_background,
+            JobStatus.snapping,
+        }:
+            raise RuntimeError("Job is already running")
+
         record.k_colors = req.k_colors
         record.pixel_size = req.pixel_size
+        record.error = None
+        record.stage_error = None
+        # A new snap invalidates any hand edit of the previous snap.
+        edited = self.store.stage_path(job_id, "edited")
+        if edited.exists():
+            edited.unlink()
+        record.stages["edited"] = False
+        record.stages["snapped"] = False
         self.store.save(record)
+        self.store.set_status(record, JobStatus.snapping)
+        return self.store.get(job_id)  # type: ignore[return-value]
 
+    def run_resnap(self, job_id: str) -> None:
+        record = self.store.get(job_id)
+        if record is None:
+            return
+        cutout = self.store.stage_path(job_id, "cutout")
+        if not cutout.exists():
+            self.store.set_status(
+                record,
+                JobStatus.failed,
+                error="cutout.png missing; cannot resnap",
+                stage_error="snapping",
+            )
+            return
         try:
-            self.store.set_status(record, JobStatus.snapping)
             self._snap(record, cutout)
             self.store.set_status(record, JobStatus.completed)
         except Exception as exc:
+            logger.exception("Resnap %s failed", job_id)
+            record = self.store.get(job_id) or record
             self.store.set_status(
                 record, JobStatus.failed, error=str(exc), stage_error="snapping"
             )
-            raise
 
-        return self.store.get(job_id)  # type: ignore[return-value]
+    def resnap(self, job_id: str, req: ResnapRequest) -> JobRecord:
+        """Synchronous resnap (MCP / scripts). Prefer start_resnap + run_resnap in the API."""
+        record = self.start_resnap(job_id, req)
+        self.run_resnap(record.id)
+        done = self.store.get(job_id)
+        if done is None:
+            raise FileNotFoundError(f"Job not found: {job_id}")
+        if done.status == JobStatus.failed:
+            raise RuntimeError(done.error or "Resnap failed")
+        return done
 
     def process_upload(
         self,

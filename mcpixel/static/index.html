@@ -230,11 +230,17 @@
             <div class="hero-actions">
               <div class="row resnap-row">
                 <label>
-                  Resnap k
+                  <span class="field-label">
+                    Resnap k
+                    <button type="button" class="info-tip" data-tip="Palette size after snap (2–64). Lower = fewer colors." aria-label="About Resnap k">i</button>
+                  </span>
                   <input id="resnapK" type="number" min="2" max="64" value="16" />
                 </label>
                 <label>
-                  Pixel size
+                  <span class="field-label">
+                    Pixel size
+                    <button type="button" class="info-tip" data-tip="Source pixels per output pixel. Lower = finer detail / larger canvas. Leave empty to auto-detect from the cutout." aria-label="About Pixel size">i</button>
+                  </span>
                   <input id="resnapPx" type="number" min="1" step="1" placeholder="auto" />
                 </label>
               </div>
