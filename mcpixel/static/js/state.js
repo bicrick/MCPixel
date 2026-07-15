@@ -37,8 +37,10 @@ export const PROGRESS_BY_STATUS = {
 
 export const state = {
   currentJobId: null,
-  mainMode: "empty", // empty | create | job
-  railTab: "queue", // queue | library | projects
+  mainMode: "empty", // empty | create | job | library
+  railTab: "queue", // queue | library
+  libraryFilter: "all", // all | unfiled | project id
+  libraryReturn: false,
   lastLibraryFp: null,
   jobsById: new Map(),
   projects: [],
@@ -190,15 +192,19 @@ export function setMainMode(mode) {
   const empty = $("emptyState");
   const create = $("createView");
   const inspect = $("inspect");
+  const library = $("libraryView");
   if (empty) empty.hidden = mode !== "empty";
   if (create) create.hidden = mode !== "create";
   if (inspect) inspect.hidden = mode !== "job";
+  if (library) library.hidden = mode !== "library";
   const newBtn = $("newBtn");
   if (newBtn) {
     const onCreate = mode === "create";
     newBtn.disabled = onCreate;
     newBtn.setAttribute("aria-disabled", onCreate ? "true" : "false");
   }
+  const backBtn = $("backToLibraryBtn");
+  if (backBtn) backBtn.hidden = !(mode === "job" && state.libraryReturn);
 }
 
 export function setRailTab(tab) {
@@ -210,10 +216,8 @@ export function setRailTab(tab) {
   });
   const queuePane = document.querySelector(".queue-pane");
   const libraryPane = document.querySelector(".library-pane");
-  const projectsPane = document.querySelector(".projects-pane");
   if (queuePane) queuePane.hidden = tab !== "queue";
   if (libraryPane) libraryPane.hidden = tab !== "library";
-  if (projectsPane) projectsPane.hidden = tab !== "projects";
 }
 
 export function filedJobIds() {

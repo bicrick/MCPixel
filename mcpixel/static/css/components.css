@@ -205,8 +205,7 @@
 }
 
 .queue-pane,
-.library-pane,
-.projects-pane {
+.library-pane {
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -214,7 +213,6 @@
   padding-bottom: 0.5rem;
 }
 
-.projects-pane[hidden],
 .library-pane[hidden],
 .queue-pane[hidden] {
   display: none;
@@ -225,11 +223,57 @@
   line-height: 1.4;
 }
 
-.library-grid {
+.library-filters {
   flex: 1;
   overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-content: start;
+}
+
+.library-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  width: 100%;
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  background: var(--bg0);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+.library-filter:hover,
+.library-filter.active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--bg2));
+}
+
+.library-filter .filter-count {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.65rem;
+}
+
+.library-filter-row {
+  display: flex;
+  gap: 0.25rem;
+  align-items: stretch;
+}
+
+.library-filter-row .library-filter {
+  flex: 1;
+  min-width: 0;
+}
+
+.library-grid,
+.ref-picker-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
   gap: 0.45rem;
   align-content: start;
 }
@@ -275,6 +319,59 @@
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+}
+
+.library-view {
+  width: 100%;
+  max-width: none;
+}
+
+.library-view-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.55rem 1rem;
+  margin-bottom: 1rem;
+}
+
+.library-view-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.library-explorer-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.65rem;
+  align-content: start;
+}
+
+.library-explorer-grid .library-item {
+  padding: 0.5rem;
+}
+
+.library-explorer-grid .library-caption {
+  font-size: 0.65rem;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 0.45rem;
+  padding: 0.25rem 0;
+  background: transparent;
+  color: var(--muted);
+  border: 0;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.back-link:hover {
+  color: var(--ink);
+}
+
+.back-link[hidden] {
+  display: none !important;
 }
 
 .rail-footer {
@@ -414,10 +511,25 @@
   color: var(--muted);
 }
 
+.prompt-wrap {
+  position: relative;
+}
+
+.prompt-wrap textarea {
+  width: 100%;
+  margin: 0;
+  padding-right: 2.4rem;
+  min-height: 8rem;
+}
+
 .refine-btn {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 1;
   padding: 0.2rem 0.45rem;
   font-size: 0.85rem;
-  background: transparent;
+  background: color-mix(in srgb, var(--bg0) 85%, transparent);
   color: var(--accent-2);
   border: 1px solid var(--line);
   line-height: 1;
@@ -431,11 +543,6 @@
 .refine-btn.busy {
   opacity: 0.6;
   pointer-events: none;
-}
-
-.prompt-field textarea {
-  width: 100%;
-  margin: 0;
 }
 
 .reference-row {
@@ -527,6 +634,47 @@
   display: none !important;
 }
 
+.choose-wrap {
+  position: relative;
+}
+
+.choose-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 11rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--line);
+  background: var(--bg1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.choose-menu[hidden] {
+  display: none !important;
+}
+
+.choose-menu button {
+  justify-content: flex-start;
+  width: 100%;
+  background: transparent;
+  color: var(--ink);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  font-weight: 600;
+  padding: 0.55rem 0.7rem;
+}
+
+.choose-menu button:last-child {
+  border-bottom: 0;
+}
+
+.choose-menu button:hover {
+  background: var(--bg2);
+}
+
 .secondary-file {
   background: var(--bg2);
   color: var(--ink);
@@ -536,6 +684,21 @@
 .upload-hint {
   margin: 0 0 0.65rem;
   line-height: 1.4;
+}
+
+.create-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 0.5rem;
+  margin-bottom: 0.55rem;
+}
+
+.create-actions > button,
+.create-actions > .file-btn {
+  min-height: 2.5rem;
+  height: 2.5rem;
+  box-sizing: border-box;
+  margin: 0;
 }
 
 .k-chip {
@@ -585,8 +748,6 @@
   gap: 0.45rem;
   align-items: center;
 }
-
-.create-actions { margin-bottom: 0.55rem; }
 
 .size-row, .k-row {
   margin-bottom: 0.55rem;

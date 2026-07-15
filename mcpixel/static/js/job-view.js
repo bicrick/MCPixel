@@ -13,8 +13,80 @@ import {
   upsertJob,
 } from "./state.js";
 import { renderQueue } from "./queue.js";
-import { renderLibrary } from "./library.js";
-import { renderProjectsPane } from "./projects.js";
+import { renderLibrary, renderLibraryFilters } from "./library.js";
+
+function syncLibraryBack() {
+  const backBtn = $("backToLibraryBtn");
+  if (backBtn) backBtn.hidden = !(state.mainMode === "job" && state.libraryReturn);
+}
+
+export function clearSelection(handlers) {
+  state.currentJobId = null;
+  state.paintedJobId = null;
+  state.lastJobFp = null;
+  state.libraryReturn = false;
+  setMainMode("empty");
+  const bar = $("jobProgress");
+  if (bar) bar.hidden = true;
+  renderQueue(handlers, { force: true });
+  renderLibraryFilters(handlers, { force: true });
+  renderLibrary(handlers, { force: true });
+}
+
+export function showCreate(handlers) {
+  state.currentJobId = null;
+  state.paintedJobId = null;
+  state.lastJobFp = null;
+  state.libraryReturn = false;
+  setMainMode("create");
+  history.replaceState(null, "", "/");
+  const bar = $("jobProgress");
+  if (bar) bar.hidden = true;
+  renderQueue(handlers, { force: true });
+  renderLibraryFilters(handlers, { force: true });
+  renderLibrary(handlers, { force: true });
+}
+
+/**
+ * @param {object} job
+ * @param {object} handlers
+ * @param {{ force?: boolean }} [opts]
+ */
+export function renderJob(job, handlers, opts = {}) {
+  upsertJob(job);
+  const fp = jobFingerprint(job);
+  const switching = state.paintedJobId !== job.id;
+  const force = Boolean(opts.force) || switching;
+
+  if (!force && fp === state.lastJobFp && state.currentJobId === job.id) {
+    return;
+  }
+
+  state.currentJobId = job.id;
+  setMainMode("job");
+  syncLibraryBack();
+
+  if (force) {
+    syncResnapInputs(job, true);
+    mountStepper(job);
+    mountHero(job);
+    mountStages(job);
+  } else {
+    patchStepper(job);
+    patchHero(job);
+    patchStages(job);
+  }
+
+  patchJobChrome(job);
+  updateProgressBar(job);
+
+  state.paintedJobId = job.id;
+  state.lastJobFp = fp;
+
+  renderQueue(handlers, { force: switching });
+  renderLibrary(handlers, { force: switching });
+  if (switching) renderLibraryFilters(handlers, { force: true });
+}
 
 function stepStates(job) {
   const status = job.status;
@@ -226,69 +298,4 @@ function syncResnapInputs(job, force) {
   if (!force) return;
   $("resnapK").value = job.k_colors || 16;
   $("resnapPx").value = job.pixel_size != null ? job.pixel_size : "";
-}
-
-export function clearSelection(handlers) {
-  state.currentJobId = null;
-  state.paintedJobId = null;
-  state.lastJobFp = null;
-  setMainMode("empty");
-  const bar = $("jobProgress");
-  if (bar) bar.hidden = true;
-  renderQueue(handlers, { force: true });
-  renderLibrary(handlers, { force: true });
-  renderProjectsPane(handlers);
-}
-
-export function showCreate(handlers) {
-  state.currentJobId = null;
-  state.paintedJobId = null;
-  state.lastJobFp = null;
-  setMainMode("create");
-  history.replaceState(null, "", "/");
-  const bar = $("jobProgress");
-  if (bar) bar.hidden = true;
-  renderQueue(handlers, { force: true });
-  renderLibrary(handlers, { force: true });
-  renderProjectsPane(handlers);
-}
-
-/**
- * @param {object} job
- * @param {object} handlers
- * @param {{ force?: boolean }} [opts]
- */
-export function renderJob(job, handlers, opts = {}) {
-  upsertJob(job);
-  const fp = jobFingerprint(job);
-  const switching = state.paintedJobId !== job.id;
-  const force = Boolean(opts.force) || switching;
-
-  if (!force && fp === state.lastJobFp && state.currentJobId === job.id) {
-    return;
-  }
-
-  state.currentJobId = job.id;
-  setMainMode("job");
-
-  if (force) {
-    syncResnapInputs(job, true);
-    mountStepper(job);
-    mountHero(job);
-    mountStages(job);
-  } else {
-    patchStepper(job);
-    patchHero(job);
-    patchStages(job);
-  }
-
-  patchJobChrome(job);
-  updateProgressBar(job);
-
-  state.paintedJobId = job.id;
-  state.lastJobFp = fp;
-
-  renderQueue(handlers, { force: switching });
-  renderLibrary(handlers, { force: switching });
-  if (switching) renderProjectsPane(handlers);
 }

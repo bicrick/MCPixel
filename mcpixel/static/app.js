@@ -22,7 +22,11 @@ import {
   openProjectMenu,
   renderQueue,
 } from "./js/queue.js";
-import { renderLibrary } from "./js/library.js";
+import {
+  renderLibrary,
+  renderLibraryFilters,
+  showLibraryExplorer,
+} from "./js/library.js";
 import { clearSelection, renderJob, showCreate } from "./js/job-view.js";
 import {
   bindEditorEvents,
@@ -36,12 +40,13 @@ import {
   bindKChips,
   bindReferenceControls,
   bindSizeChips,
+  closeChooseRefMenu,
   closeRefPicker,
   generateJob,
   openRefPicker,
   retryFromJob,
+  setReferenceFile,
   setTargetFromJob,
-  uploadFile,
 } from "./js/generate.js";
 import {
   addJobToProject,
@@ -50,12 +55,11 @@ import {
   promptNewProject,
   removeJobFromProject,
   renameProject,
-  renderProjectsPane,
 } from "./js/projects.js";
 import { bindSettings, closeSettings } from "./js/settings.js";
 
 const queueHandlers = {
-  onSelect: (id) => selectJob(id),
+  onSelect: (id) => selectJob(id, { fromLibrary: false }),
   onMenuAction: (action, id, projectId) => handleMenuAction(action, id, projectId),
   onClearFailed: () => handleClearFailed(),
   onOpenMenu: (id, btn) => {
@@ -71,6 +75,16 @@ const queueHandlers = {
     openProjectMenu(projectId, btn);
   },
 };
+
+const libraryHandlers = {
+  ...queueHandlers,
+  onSelect: (id) => selectJob(id, { fromLibrary: true }),
+};
+
+function refreshLibraryChrome() {
+  renderLibraryFilters(libraryHandlers, { force: true });
+  renderLibrary(libraryHandlers);
+}
 
 function ensurePolling() {
   if (anyActive()) {
@@ -93,8 +107,10 @@ function updateActiveBadge() {
   if (tab) tab.textContent = n ? `Queue (${n})` : "Queue";
 }
 
-async function selectJob(id, { mobileSwitch = true } = {}) {
+async function selectJob(id, { mobileSwitch = true, fromLibrary = false } = {}) {
   try {
+    if (fromLibrary) state.libraryReturn = true;
+    else state.libraryReturn = false;
     const job = await api(`/v1/jobs/${id}`);
     renderJob(job, queueHandlers, { force: true });
     setTargetFromJob(job);
@@ -123,14 +139,16 @@ async function refreshQueue() {
       renderJob(detail, queueHandlers);
     } else if (listFp !== state.lastQueueFp) {
       renderQueue(queueHandlers);
-      renderLibrary(queueHandlers);
+      refreshLibraryChrome();
     }
+  } else if (state.mainMode === "library") {
+    renderQueue(queueHandlers);
+    refreshLibraryChrome();
   } else if (listFp !== state.lastQueueFp) {
     renderQueue(queueHandlers);
-    renderLibrary(queueHandlers);
-    renderProjectsPane(queueHandlers);
+    refreshLibraryChrome();
   } else if (state.railTab === "library") {
-    renderLibrary(queueHandlers);
+    refreshLibraryChrome();
   }
 
   ensurePolling();
@@ -160,6 +178,7 @@ async function loadHealth() {
 async function afterNewJob(job) {
   upsertJob(job);
   state.lastQueueFp = null;
+  state.libraryReturn = false;
   renderJob(job, queueHandlers, { force: true });
   history.replaceState(null, "", `/?job=${job.id}`);
   setMobileTab("job");
@@ -174,7 +193,7 @@ async function handleMenuAction(action, jobId, projectId) {
       const name = prompt("Rename project", current?.name || "");
       if (!name?.trim()) return;
       await renameProject(projectId, name.trim());
-      renderProjectsPane(queueHandlers);
+      refreshLibraryChrome();
       toast("Renamed.");
       return;
     }
@@ -184,7 +203,8 @@ async function handleMenuAction(action, jobId, projectId) {
         return;
       }
       await deleteProject(projectId);
-      renderProjectsPane(queueHandlers);
+      if (state.libraryFilter === projectId) state.libraryFilter = "all";
+      refreshLibraryChrome();
       toast("Project deleted.");
       return;
     }
@@ -200,7 +220,7 @@ async function handleMenuAction(action, jobId, projectId) {
       return;
     }
     if (action === "resnap") {
-      await selectJob(jobId);
+      await selectJob(jobId, { fromLibrary: state.libraryReturn });
       $("resnapK")?.focus();
       return;
     }
@@ -222,8 +242,7 @@ async function handleMenuAction(action, jobId, projectId) {
       await addJobToProject(projectId, jobId);
       await loadProjects();
       renderQueue(queueHandlers);
-      renderLibrary(queueHandlers);
-      renderProjectsPane(queueHandlers);
+      refreshLibraryChrome();
       toast("Added to project.");
       return;
     }
@@ -233,8 +252,7 @@ async function handleMenuAction(action, jobId, projectId) {
       await addJobToProject(project.id, jobId);
       await loadProjects();
       renderQueue(queueHandlers);
-      renderLibrary(queueHandlers);
-      renderProjectsPane(queueHandlers);
+      refreshLibraryChrome();
       toast("Added to project.");
       return;
     }
@@ -242,8 +260,7 @@ async function handleMenuAction(action, jobId, projectId) {
       await removeJobFromProject(projectId, jobId);
       await loadProjects();
       renderQueue(queueHandlers);
-      renderLibrary(queueHandlers);
-      renderProjectsPane(queueHandlers);
+      refreshLibraryChrome();
       toast("Removed from project.");
       return;
     }
@@ -251,12 +268,16 @@ async function handleMenuAction(action, jobId, projectId) {
       if (!confirm(`Delete job permanently?\n${job.prompt || jobId}`)) return;
       await deleteJob(jobId);
       if (state.currentJobId === jobId) {
-        clearSelection(queueHandlers);
-        history.replaceState(null, "", "/");
+        if (state.libraryReturn) {
+          setRailTab("library");
+          showLibraryExplorer(libraryHandlers);
+        } else {
+          clearSelection(queueHandlers);
+          history.replaceState(null, "", "/");
+        }
       } else {
         renderQueue(queueHandlers);
-        renderLibrary(queueHandlers);
-        renderProjectsPane(queueHandlers);
+        refreshLibraryChrome();
       }
       toast("Deleted.");
       updateActiveBadge();
@@ -275,8 +296,7 @@ async function handleClearFailed() {
       history.replaceState(null, "", "/");
     } else {
       renderQueue(queueHandlers);
-      renderLibrary(queueHandlers);
-      renderProjectsPane(queueHandlers);
+      refreshLibraryChrome();
     }
     updateActiveBadge();
   } catch (e) {
@@ -316,16 +336,21 @@ function openCreateWorkspace() {
   $("prompt")?.focus();
 }
 
+function openLibraryWorkspace() {
+  setRailTab("library");
+  showLibraryExplorer(libraryHandlers);
+  setMobileTab("queue");
+}
+
 function bindUi() {
   bindSizeChips();
   bindKChips();
   bindEditorEvents();
   bindSettings(() => loadHealth());
-  bindCreateDrop((file) =>
-    uploadFile(file)
-      .then(afterNewJob)
-      .catch((e) => toast(e.message))
-  );
+  bindCreateDrop((file) => {
+    setReferenceFile(file);
+    toast("Reference set from drop.");
+  });
   bindCreateMenu({ onCreateSprite: openCreateWorkspace });
   bindReferenceControls({ onPickJob: openRefPicker });
 
@@ -336,15 +361,23 @@ function bindUi() {
 
   $("newProjectBtn")?.addEventListener("click", async () => {
     await promptNewProject();
-    renderProjectsPane(queueHandlers);
+    refreshLibraryChrome();
+  });
+
+  $("backToLibraryBtn")?.addEventListener("click", () => {
+    openLibraryWorkspace();
   });
 
   document.querySelectorAll(".rail-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
-      setRailTab(btn.dataset.rail);
-      if (btn.dataset.rail === "projects") renderProjectsPane(queueHandlers);
-      else if (btn.dataset.rail === "library") renderLibrary(queueHandlers);
-      else renderQueue(queueHandlers);
+      const tab = btn.dataset.rail;
+      setRailTab(tab);
+      if (tab === "library") {
+        showLibraryExplorer(libraryHandlers);
+      } else {
+        renderQueue(queueHandlers);
+        if (state.mainMode === "library") setMainMode("empty");
+      }
     });
   });
 
@@ -364,14 +397,6 @@ function bindUi() {
     }).catch((e) => toast(e.message))
   );
   $("closeEditorBtn").addEventListener("click", closeEditor);
-  $("upload").addEventListener("change", (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      uploadFile(file)
-        .then(afterNewJob)
-        .catch((err) => toast(err.message));
-    }
-  });
 
   document.querySelectorAll(".filter-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -391,7 +416,9 @@ function bindUi() {
       setMobileTab(tab);
       if (tab === "create") openCreateWorkspace();
       else if (tab === "queue") setRailTab("queue");
-      else if (tab === "job" && state.currentJobId) selectJob(state.currentJobId, { mobileSwitch: false });
+      else if (tab === "job" && state.currentJobId) {
+        selectJob(state.currentJobId, { mobileSwitch: false, fromLibrary: state.libraryReturn });
+      }
     });
   });
 
@@ -404,6 +431,7 @@ function bindUi() {
       closeJobMenu();
       closeSettings();
       closeRefPicker();
+      closeChooseRefMenu();
       if (!$("editorOverlay").hidden) closeEditor();
     }
     if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
@@ -429,15 +457,13 @@ bindUi();
 loadHealth();
 Promise.all([refreshQueue(), loadProjects()])
   .then(() => {
-    renderProjectsPane(queueHandlers);
-    renderLibrary(queueHandlers);
+    refreshLibraryChrome();
     const params = new URLSearchParams(location.search);
     const jobParam = params.get("job");
-    if (jobParam) return selectJob(jobParam, { mobileSwitch: true });
+    if (jobParam) return selectJob(jobParam, { mobileSwitch: true, fromLibrary: false });
     if (!state.jobsById.size) clearSelection(queueHandlers);
     else {
       renderQueue(queueHandlers);
-      renderLibrary(queueHandlers);
       setMainMode("empty");
     }
   })

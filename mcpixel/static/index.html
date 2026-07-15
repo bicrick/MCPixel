@@ -38,10 +38,9 @@
           <button type="button" id="newBtn" class="new-btn" title="New">+</button>
         </div>
         <div class="rail-toolbar">
-          <div class="rail-tabs" role="tablist" aria-label="Library">
+          <div class="rail-tabs" role="tablist" aria-label="Sidebar">
             <button type="button" class="rail-tab active" data-rail="queue">Queue</button>
             <button type="button" class="rail-tab" data-rail="library">Library</button>
-            <button type="button" class="rail-tab" data-rail="projects">Projects</button>
           </div>
         </div>
 
@@ -64,22 +63,12 @@
         <section class="rail-section library-pane" data-pane="library" hidden>
           <div class="queue-head">
             <div class="queue-head-row">
-              <h2>Library</h2>
-            </div>
-            <p class="meta library-blurb">Completed sprites you can open or use as references.</p>
-          </div>
-          <div id="libraryGrid" class="library-grid"></div>
-        </section>
-
-        <section class="rail-section projects-pane" data-pane="projects" hidden>
-          <div class="queue-head">
-            <div class="queue-head-row">
               <h2>Projects</h2>
-              <button type="button" id="newProjectBtn" class="secondary topbar-btn">New project</button>
+              <button type="button" id="newProjectBtn" class="secondary topbar-btn">New</button>
             </div>
+            <p class="meta library-blurb">Filter the library by project.</p>
           </div>
-          <div id="projectsList" class="queue-list"></div>
-          <div id="projectJobs" class="queue-list project-jobs" hidden></div>
+          <div id="libraryFilters" class="library-filters" role="group" aria-label="Library filters"></div>
         </section>
 
         <footer class="rail-footer">
@@ -90,8 +79,16 @@
       <main class="workspace" id="workspace">
         <div id="emptyState" class="empty-state">
           <p class="empty-title">No job selected</p>
-          <p class="empty-copy">Pick something from the queue or library, or hit + to create a sprite.</p>
+          <p class="empty-copy">Open the library, pick something from the queue, or hit + to create a sprite.</p>
         </div>
+
+        <section id="libraryView" class="library-view" hidden>
+          <div class="library-view-head">
+            <h2>Library</h2>
+            <p class="meta" id="libraryViewMeta">Completed sprites</p>
+          </div>
+          <div id="libraryGrid" class="library-explorer-grid"></div>
+        </section>
 
         <section id="createView" class="create-view" hidden>
           <div class="create-mode-bar" role="tablist" aria-label="Create mode">
@@ -109,14 +106,16 @@
               <div class="prompt-field">
                 <div class="prompt-field-head">
                   <span>Prompt</span>
+                </div>
+                <div class="prompt-wrap">
+                  <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
                   <button type="button" id="refinePromptBtn" class="refine-btn" title="Refine prompt with AI" aria-label="Refine prompt">✦</button>
                 </div>
-                <textarea id="prompt" rows="6" placeholder="16-color side-view slime, green jelly, cute, game sprite"></textarea>
               </div>
               <div class="reference-row">
                 <div class="reference-head">
                   <span>Reference image</span>
-                  <span class="meta-inline">Guides the model — not the same as Upload</span>
+                  <span class="meta-inline">Optional reference for GPT Image</span>
                 </div>
                 <div class="reference-card" id="referenceCard">
                   <div class="reference-thumb-wrap" id="referenceThumbWrap">
@@ -124,13 +123,17 @@
                     <span class="reference-placeholder" id="referencePlaceholder">No reference</span>
                   </div>
                   <div class="reference-card-body">
-                    <p id="referenceLabel" class="reference-label">Optional — choose a file or pick from the library</p>
+                    <p id="referenceLabel" class="reference-label">Optional — add a reference from library, files, or clipboard</p>
                     <div class="reference-controls">
-                      <label class="file-btn secondary-file">
-                        Choose file
-                        <input id="referenceFile" type="file" accept="image/png,image/jpeg" hidden />
-                      </label>
-                      <button type="button" id="pickRefJobBtn" class="secondary">Pick from library</button>
+                      <div class="choose-wrap" id="chooseRefWrap">
+                        <button type="button" id="chooseRefBtn" class="secondary" aria-haspopup="menu" aria-expanded="false">Choose</button>
+                        <div id="chooseRefMenu" class="choose-menu" hidden role="menu">
+                          <button type="button" role="menuitem" data-ref-source="library">From library</button>
+                          <button type="button" role="menuitem" data-ref-source="filesystem">From filesystem</button>
+                          <button type="button" role="menuitem" data-ref-source="clipboard">From clipboard</button>
+                        </div>
+                        <input id="referenceFile" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+                      </div>
                       <button type="button" id="clearRefBtn" class="secondary" hidden>Clear</button>
                     </div>
                   </div>
@@ -156,12 +159,7 @@
               </div>
               <div class="actions create-actions">
                 <button id="generateBtn" type="button">Generate</button>
-                <label class="file-btn">
-                  Upload
-                  <input id="upload" type="file" accept="image/png,image/jpeg" hidden />
-                </label>
               </div>
-              <p class="meta upload-hint">Upload processes a local image through cutout/snap (no image model). Reference is passed to GPT Image.</p>
               <details class="advanced">
                 <summary>Advanced</summary>
                 <div class="size-row k-row">
@@ -204,6 +202,7 @@
         <section id="inspect" class="job-view" hidden>
           <div class="job-head">
             <div class="job-head-text">
+              <button type="button" id="backToLibraryBtn" class="back-link" hidden>← Library</button>
               <p id="jobPrompt" class="prompt-echo"></p>
               <p class="job-id-line"><code id="jobId"></code></p>
             </div>

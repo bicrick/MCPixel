@@ -121,7 +121,7 @@ function syncReferenceUi({ src = null, label = "", hasRef = false } = {}) {
   if (labelEl) {
     labelEl.textContent = hasRef
       ? label
-      : "Optional — choose a file or pick from the library";
+      : "Optional — add a reference from library, files, or clipboard";
   }
 }
 
@@ -288,14 +288,71 @@ export function bindKChips() {
   syncKChips();
 }
 
+export function closeChooseRefMenu() {
+  const menu = $("chooseRefMenu");
+  const btn = $("chooseRefBtn");
+  if (menu) menu.hidden = true;
+  if (btn) btn.setAttribute("aria-expanded", "false");
+}
+
+export function toggleChooseRefMenu() {
+  const menu = $("chooseRefMenu");
+  const btn = $("chooseRefBtn");
+  if (!menu || !btn) return;
+  const open = menu.hidden;
+  menu.hidden = !open;
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+}
+
+export async function setReferenceFromClipboard() {
+  try {
+    if (!navigator.clipboard?.read) {
+      toast("Clipboard image read is not available in this browser.");
+      return;
+    }
+    const items = await navigator.clipboard.read();
+    for (const item of items) {
+      const type = item.types.find((t) => t.startsWith("image/"));
+      if (!type) continue;
+      const blob = await item.getType(type);
+      const ext = type.split("/")[1] || "png";
+      const file = new File([blob], `clipboard.${ext}`, { type });
+      setReferenceFile(file);
+      toast("Reference set from clipboard.");
+      return;
+    }
+    toast("No image on the clipboard.");
+  } catch (e) {
+    toast(e.message || "Could not read clipboard.");
+  }
+}
+
 export function bindReferenceControls({ onPickJob } = {}) {
   $("referenceFile")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (file) setReferenceFile(file);
   });
   $("clearRefBtn")?.addEventListener("click", clearReference);
-  $("pickRefJobBtn")?.addEventListener("click", () => onPickJob?.());
   $("refinePromptBtn")?.addEventListener("click", () => refinePrompt());
+
+  $("chooseRefBtn")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleChooseRefMenu();
+  });
+
+  $("chooseRefMenu")?.addEventListener("click", (e) => {
+    const item = e.target.closest("[data-ref-source]");
+    if (!item) return;
+    const source = item.dataset.refSource;
+    closeChooseRefMenu();
+    if (source === "library") onPickJob?.();
+    else if (source === "filesystem") $("referenceFile")?.click();
+    else if (source === "clipboard") setReferenceFromClipboard();
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest("#chooseRefWrap")) closeChooseRefMenu();
+  });
 }
 
 export function openRefPicker() {
@@ -309,7 +366,7 @@ export function openRefPicker() {
     list.innerHTML = jobs
       .map((j) => {
         const src = bestUrl(j);
-        const caption = (j.prompt || j.id || "").slice(0, 40).replace(/</g, "&lt;");
+        const caption = (j.prompt || j.id || "").slice(0, 22).replace(/</g, "&lt;");
         return `
           <button type="button" class="library-item" data-ref-job="${j.id}" title="${(j.prompt || j.id || "").replace(/"/g, "&quot;")}">
             <img src="${src}?t=1" alt="" />
@@ -346,7 +403,7 @@ export function bindCreateDrop(onFile) {
     e.preventDefault();
     pane.classList.remove("drag-over");
     const file = e.dataTransfer?.files?.[0];
-    if (file) onFile(file);
+    if (file && file.type.startsWith("image/")) onFile(file);
   });
 }
 
