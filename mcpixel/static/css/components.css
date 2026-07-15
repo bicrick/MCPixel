@@ -170,6 +170,20 @@
   display: none;
 }
 
+.rail-footer {
+  flex-shrink: 0;
+  padding: 0.55rem 0.85rem 0.75rem;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg1) 96%, black);
+}
+
+.rail-settings-btn {
+  width: 100%;
+  justify-content: center;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.7rem;
+}
+
 .project-jobs {
   margin-top: 0.55rem;
   border-top: 1px solid var(--line);
@@ -645,7 +659,7 @@
 
 .stepper {
   list-style: none;
-  margin: 0 0 1rem;
+  margin: 0 0 0.55rem;
   padding: 0;
   display: flex;
   flex-wrap: wrap;
@@ -655,18 +669,26 @@
 .step {
   display: flex;
   align-items: center;
-  gap: 0.3rem;
+  gap: 0.4rem;
   font-size: 0.65rem;
   color: var(--muted);
-  padding: 0.3rem 0.45rem;
+  padding: 0.3rem 0.5rem;
   border: 1px solid var(--line);
   background: var(--bg0);
 }
 
-.step .step-dot {
-  width: 6px;
-  height: 6px;
-  background: var(--line);
+.step-ring {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 2px solid var(--line);
+  background: transparent;
+  box-sizing: border-box;
+}
+
+.step[data-state="todo"] .step-ring {
+  border-color: var(--line);
 }
 
 .step[data-state="done"] {
@@ -674,21 +696,79 @@
   border-color: color-mix(in srgb, var(--status-done) 40%, var(--line));
 }
 
-.step[data-state="done"] .step-dot { background: var(--status-done); }
+.step[data-state="done"] .step-ring {
+  border-color: var(--status-done);
+  background: var(--status-done);
+}
 
 .step[data-state="current"] {
   color: var(--accent-2);
   border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
 }
 
-.step[data-state="current"] .step-dot { background: var(--accent-2); }
+.step[data-state="current"] .step-ring {
+  border-color: color-mix(in srgb, var(--accent-2) 35%, transparent);
+  border-top-color: var(--accent-2);
+  animation: step-spin 0.85s linear infinite;
+}
 
 .step[data-state="failed"] {
   color: var(--danger);
   border-color: color-mix(in srgb, var(--danger) 50%, var(--line));
 }
 
-.step[data-state="failed"] .step-dot { background: var(--danger); }
+.step[data-state="failed"] .step-ring {
+  border-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 55%, transparent);
+}
+
+@keyframes step-spin {
+  to { transform: rotate(360deg); }
+}
+
+.job-progress {
+  height: 4px;
+  margin: 0 0 1rem;
+  background: var(--bg0);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.job-progress[hidden] { display: none; }
+
+.job-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--accent-2);
+  transition: width 0.35s ease;
+}
+
+.job-progress[data-status="completed"] .job-progress-fill {
+  background: var(--status-done);
+}
+
+.job-progress[data-status="failed"] .job-progress-fill {
+  background: var(--status-failed);
+}
+
+.job-progress[data-status="queued"] .job-progress-fill,
+.job-progress[data-status="generating"] .job-progress-fill,
+.job-progress[data-status="removing_background"] .job-progress-fill,
+.job-progress[data-status="snapping"] .job-progress-fill {
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent-2) 55%, transparent),
+    var(--accent-2),
+    color-mix(in srgb, var(--accent-2) 55%, transparent)
+  );
+  background-size: 200% 100%;
+  animation: progress-shimmer 1.4s linear infinite;
+}
+
+@keyframes progress-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
 
 .hero-preview {
   display: grid;

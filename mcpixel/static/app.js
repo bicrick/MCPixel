@@ -4,9 +4,12 @@ import {
   anyActive,
   bestUrl,
   cacheJobs,
+  jobFingerprint,
+  queueFingerprint,
   setMainMode,
   setMobileTab,
   setRailTab,
+  sortedJobs,
   state,
   toast,
   upsertJob,
@@ -87,7 +90,7 @@ function updateActiveBadge() {
 async function selectJob(id, { mobileSwitch = true } = {}) {
   try {
     const job = await api(`/v1/jobs/${id}`);
-    renderJob(job, queueHandlers);
+    renderJob(job, queueHandlers, { force: true });
     setTargetFromJob(job);
     history.replaceState(null, "", `/?job=${id}`);
     if (mobileSwitch) setMobileTab("job");
@@ -100,16 +103,27 @@ async function selectJob(id, { mobileSwitch = true } = {}) {
 
 async function refreshQueue() {
   const data = await api("/v1/jobs?limit=50");
-  cacheJobs(data.jobs || []);
+  const jobs = data.jobs || [];
+  cacheJobs(jobs);
   updateActiveBadge();
+
+  const listFp =
+    queueFingerprint(sortedJobs()) + `|sel:${state.currentJobId || ""}|f:${state.queueFilter}`;
+
   if (state.mainMode === "job" && state.currentJobId && state.jobsById.has(state.currentJobId)) {
     const detail = await api(`/v1/jobs/${state.currentJobId}`);
-    renderJob(detail, queueHandlers);
-  } else {
+    const detailFp = jobFingerprint(detail);
+    if (detailFp !== state.lastJobFp || state.paintedJobId !== detail.id) {
+      renderJob(detail, queueHandlers);
+    } else if (listFp !== state.lastQueueFp) {
+      renderQueue(queueHandlers);
+    }
+  } else if (listFp !== state.lastQueueFp) {
     renderQueue(queueHandlers);
     renderProjectsPane(queueHandlers);
-    ensurePolling();
   }
+
+  ensurePolling();
 }
 
 async function loadHealth() {
@@ -135,7 +149,8 @@ async function loadHealth() {
 
 async function afterNewJob(job) {
   upsertJob(job);
-  renderJob(job, queueHandlers);
+  state.lastQueueFp = null;
+  renderJob(job, queueHandlers, { force: true });
   history.replaceState(null, "", `/?job=${job.id}`);
   setMobileTab("job");
   ensurePolling();
@@ -342,7 +357,8 @@ function bindUi() {
         .querySelectorAll(".filter-btn")
         .forEach((b) => b.classList.remove("active"));
       btn.classList.add("active");
-      renderQueue(queueHandlers);
+      state.lastQueueFp = null;
+      renderQueue(queueHandlers, { force: true });
     });
   });
 

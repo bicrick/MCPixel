@@ -3,6 +3,7 @@ import {
   $,
   STATUS_LABELS,
   bestUrl,
+  cacheBust,
   isActive,
   relativeTime,
   sortedJobs,
@@ -71,7 +72,7 @@ export async function removeJobFromProject(projectId, jobId) {
 function jobCardHtml(j) {
   const src = bestUrl(j);
   const thumb = src
-    ? `<img src="${src}?t=${Date.parse(j.updated_at || j.created_at) || Date.now()}" alt="" />`
+    ? `<img src="${src}?t=${cacheBust(j)}" alt="" data-url="${src}" />`
     : isActive(j.status)
       ? `<span class="spinner" aria-hidden="true"></span>`
       : `<span class="meta">${escapeHtml(STATUS_LABELS[j.status] || j.status)}</span>`;

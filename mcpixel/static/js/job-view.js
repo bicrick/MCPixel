@@ -4,7 +4,10 @@ import {
   PIPELINE_STEPS,
   STATUS_LABELS,
   bestUrl,
+  cacheBust,
   isActive,
+  jobFingerprint,
+  progressPercent,
   setMainMode,
   state,
   upsertJob,
@@ -38,29 +41,95 @@ function stepStates(job) {
   });
 }
 
-function renderStepper(job) {
+function mountStepper(job) {
   const states = stepStates(job);
   $("stepper").innerHTML = PIPELINE_STEPS.map((step, i) => {
     return `
-      <li class="step" data-state="${states[i]}">
-        <span class="step-dot" aria-hidden="true"></span>
+      <li class="step" data-step="${step.key}" data-state="${states[i]}">
+        <span class="step-ring" aria-hidden="true"></span>
         ${escapeHtml(step.label)}
       </li>
     `;
   }).join("");
 }
 
-function stageCard(name, url) {
+function patchStepper(job) {
+  const states = stepStates(job);
+  const nodes = $("stepper").querySelectorAll(".step");
+  if (nodes.length !== PIPELINE_STEPS.length) {
+    mountStepper(job);
+    return;
+  }
+  nodes.forEach((node, i) => {
+    node.dataset.state = states[i];
+  });
+}
+
+function updateProgressBar(job) {
+  const bar = $("jobProgress");
+  const fill = $("jobProgressFill");
+  if (!bar || !fill) return;
+  const pct = progressPercent(job);
+  bar.hidden = false;
+  bar.dataset.status = job.status;
+  bar.setAttribute("aria-valuenow", String(pct));
+  fill.style.width = `${pct}%`;
+}
+
+function stageCard(name, url, bust) {
   return `
-    <article class="stage">
+    <article class="stage" data-stage="${escapeHtml(name)}">
       <h3>${escapeHtml(name)}</h3>
       ${
         url
-          ? `<img src="${url}?t=${Date.now()}" alt="${escapeHtml(name)}" />`
+          ? `<img src="${url}?t=${bust}" alt="${escapeHtml(name)}" data-url="${url}" />`
           : `<div class="stage-empty">Waiting…</div>`
       }
     </article>
   `;
+}
+
+function mountStages(job) {
+  const urls = job.urls || {};
+  const bust = cacheBust(job);
+  const cards = [
+    stageCard("raw", urls.raw, bust),
+    stageCard("cutout", urls.cutout, bust),
+    stageCard("snapped", urls.snapped, bust),
+  ];
+  if (urls.edited) cards.push(stageCard("edited", urls.edited, bust));
+  $("stages").innerHTML = cards.join("");
+}
+
+function patchStages(job) {
+  const urls = job.urls || {};
+  const bust = cacheBust(job);
+  const root = $("stages");
+  const needed = ["raw", "cutout", "snapped"].concat(urls.edited ? ["edited"] : []);
+  const existing = [...root.querySelectorAll(".stage")].map((el) => el.dataset.stage);
+  if (existing.join(",") !== needed.join(",")) {
+    mountStages(job);
+    return;
+  }
+  for (const name of needed) {
+    const article = root.querySelector(`.stage[data-stage="${name}"]`);
+    if (!article) continue;
+    const url = urls[name];
+    const img = article.querySelector("img");
+    if (url) {
+      if (!img) {
+        article.querySelector(".stage-empty")?.remove();
+        const next = document.createElement("img");
+        next.alt = name;
+        next.dataset.url = url;
+        next.src = `${url}?t=${bust}`;
+        article.appendChild(next);
+      } else if (img.dataset.url !== url) {
+        img.dataset.url = url;
+        img.src = `${url}?t=${bust}`;
+      }
+    }
+  }
 }
 
 function frameInnerSize() {
@@ -76,15 +145,15 @@ function scaleHeroImage(img) {
   img.style.height = `${(img.naturalHeight || 0) * scale}px`;
 }
 
-function renderHero(job) {
+function mountHero(job) {
   const url = bestUrl(job);
   const frame = $("heroFrame");
   const download = $("downloadBtn");
   if (url) {
-    frame.innerHTML = `<img alt="Result preview" />`;
+    frame.innerHTML = `<img alt="Result preview" data-url="${url}" />`;
     const img = frame.querySelector("img");
     img.onload = () => scaleHeroImage(img);
-    img.src = `${url}?t=${Date.now()}`;
+    img.src = `${url}?t=${cacheBust(job)}`;
     download.hidden = false;
     download.href = url;
     download.download = `${job.id}_best.png`;
@@ -97,45 +166,43 @@ function renderHero(job) {
   }
 }
 
-export function clearSelection(handlers) {
-  state.currentJobId = null;
-  setMainMode("empty");
-  renderQueue(handlers);
-  renderProjectsPane(handlers);
+function patchHero(job) {
+  const url = bestUrl(job);
+  const frame = $("heroFrame");
+  const download = $("downloadBtn");
+  const img = frame.querySelector("img");
+  if (url) {
+    if (img && img.dataset.url === url) {
+      download.hidden = false;
+      download.href = url;
+      return;
+    }
+    mountHero(job);
+    return;
+  }
+  if (img) {
+    mountHero(job);
+    return;
+  }
+  const placeholder = frame.querySelector(".hero-placeholder");
+  if (job.status === "failed") {
+    const text = `Failed${job.error ? `: ${job.error}` : ""}`;
+    if (!placeholder || placeholder.textContent !== text) mountHero(job);
+  } else {
+    const text = `Working — ${STATUS_LABELS[job.status] || job.status}…`;
+    if (!placeholder || placeholder.textContent !== text) {
+      if (placeholder) placeholder.textContent = text;
+      else mountHero(job);
+    }
+  }
+  download.hidden = true;
 }
 
-export function showCreate(handlers) {
-  state.currentJobId = null;
-  setMainMode("create");
-  history.replaceState(null, "", "/");
-  renderQueue(handlers);
-  renderProjectsPane(handlers);
-}
-
-export function renderJob(job, handlers) {
-  upsertJob(job);
-  state.currentJobId = job.id;
-  setMainMode("job");
+function patchJobChrome(job) {
   $("jobId").textContent = job.id;
   $("jobStatus").textContent = STATUS_LABELS[job.status] || job.status;
   $("jobStatus").dataset.status = job.status;
   $("jobPrompt").textContent = job.prompt;
-  $("resnapK").value = job.k_colors || 16;
-  $("resnapPx").value = job.pixel_size != null ? job.pixel_size : "";
-
-  renderStepper(job);
-  renderHero(job);
-
-  const urls = job.urls || {};
-  const cards = [
-    stageCard("raw", urls.raw),
-    stageCard("cutout", urls.cutout),
-    stageCard("snapped", urls.snapped),
-  ];
-  if (urls.edited) {
-    cards.push(stageCard("edited", urls.edited));
-  }
-  $("stages").innerHTML = cards.join("");
 
   const bits = [];
   if (job.target_width && job.target_height) {
@@ -148,10 +215,76 @@ export function renderJob(job, handlers) {
   if (job.error) bits.push(`error: ${job.error}`);
   $("metaLine").textContent = bits.join(" · ");
 
+  const urls = job.urls || {};
   const canEdit = Boolean(urls.snapped || urls.cutout);
   $("editBtn").disabled = !canEdit || isActive(job.status);
   $("resnapBtn").disabled = !urls.cutout || isActive(job.status);
+}
 
-  renderQueue(handlers);
+function syncResnapInputs(job, force) {
+  if (!force) return;
+  $("resnapK").value = job.k_colors || 16;
+  $("resnapPx").value = job.pixel_size != null ? job.pixel_size : "";
+}
+
+export function clearSelection(handlers) {
+  state.currentJobId = null;
+  state.paintedJobId = null;
+  state.lastJobFp = null;
+  setMainMode("empty");
+  const bar = $("jobProgress");
+  if (bar) bar.hidden = true;
+  renderQueue(handlers, { force: true });
   renderProjectsPane(handlers);
+}
+
+export function showCreate(handlers) {
+  state.currentJobId = null;
+  state.paintedJobId = null;
+  state.lastJobFp = null;
+  setMainMode("create");
+  history.replaceState(null, "", "/");
+  const bar = $("jobProgress");
+  if (bar) bar.hidden = true;
+  renderQueue(handlers, { force: true });
+  renderProjectsPane(handlers);
+}
+
+/**
+ * @param {object} job
+ * @param {object} handlers
+ * @param {{ force?: boolean }} [opts]
+ */
+export function renderJob(job, handlers, opts = {}) {
+  upsertJob(job);
+  const fp = jobFingerprint(job);
+  const switching = state.paintedJobId !== job.id;
+  const force = Boolean(opts.force) || switching;
+
+  if (!force && fp === state.lastJobFp && state.currentJobId === job.id) {
+    return;
+  }
+
+  state.currentJobId = job.id;
+  setMainMode("job");
+
+  if (force) {
+    syncResnapInputs(job, true);
+    mountStepper(job);
+    mountHero(job);
+    mountStages(job);
+  } else {
+    patchStepper(job);
+    patchHero(job);
+    patchStages(job);
+  }
+
+  patchJobChrome(job);
+  updateProgressBar(job);
+
+  state.paintedJobId = job.id;
+  state.lastJobFp = fp;
+
+  renderQueue(handlers, { force: switching });
+  if (switching) renderProjectsPane(handlers);
 }

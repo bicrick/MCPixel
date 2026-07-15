@@ -19,7 +19,6 @@
         <span class="topbar-tag">Local pixel suite</span>
       </div>
       <div class="topbar-right">
-        <button type="button" id="settingsBtn" class="secondary topbar-btn">Settings</button>
         <div class="topbar-health" id="healthBar" aria-live="polite">
           <span class="health-dot" id="healthDot" data-state="unknown"></span>
           <span id="healthLabel">Checking…</span>
@@ -71,6 +70,10 @@
           <div id="projectsList" class="queue-list"></div>
           <div id="projectJobs" class="queue-list project-jobs" hidden></div>
         </section>
+
+        <footer class="rail-footer">
+          <button type="button" id="settingsBtn" class="secondary rail-settings-btn">Settings</button>
+        </footer>
       </aside>
 
       <main class="workspace" id="workspace">
@@ -151,6 +154,18 @@
           </div>
 
           <ol class="stepper" id="stepper" aria-label="Pipeline progress"></ol>
+          <div
+            class="job-progress"
+            id="jobProgress"
+            role="progressbar"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+            aria-label="Job progress"
+            hidden
+          >
+            <div class="job-progress-fill" id="jobProgressFill"></div>
+          </div>
 
           <div class="hero-preview">
             <div class="hero-frame" id="heroFrame">

@@ -3,9 +3,11 @@ import {
   $,
   STATUS_LABELS,
   bestUrl,
+  cacheBust,
   failedCount,
   isActive,
   matchesFilter,
+  queueFingerprint,
   relativeTime,
   sortedJobs,
   state,
@@ -116,64 +118,62 @@ export function openProjectMenu(projectId, anchor) {
   anchor.setAttribute("aria-expanded", "true");
 }
 
-export function renderQueue({ onSelect, onMenuAction, onClearFailed, onOpenMenu } = {}) {
-  const el = $("queue");
-  const clearBtn = $("clearFailedBtn");
-  const failed = failedCount();
-  if (clearBtn) {
-    clearBtn.hidden = failed === 0;
-    clearBtn.textContent = `Clear failed (${failed})`;
+function thumbHtml(j) {
+  const src = bestUrl(j);
+  if (src) {
+    return `<img src="${src}?t=${cacheBust(j)}" alt="" data-url="${src}" data-bust="${cacheBust(j)}" />`;
   }
-
-  const jobs = sortedJobs().filter(matchesFilter);
-  if (!jobs.length) {
-    el.innerHTML = `<p class="queue-empty">No jobs in this filter.</p>`;
-  } else {
-    el.innerHTML = jobs
-      .map((j) => {
-        const src = bestUrl(j);
-        const thumb = src
-          ? `<img src="${src}?t=${Date.parse(j.updated_at || j.created_at) || Date.now()}" alt="" />`
-          : isActive(j.status)
-            ? `<span class="spinner" aria-hidden="true"></span>`
-            : `<span class="meta">${escapeHtml(STATUS_LABELS[j.status] || j.status)}</span>`;
-        const dims =
-          j.output_width && j.output_height
-            ? `<span class="queue-dims">${j.output_width}×${j.output_height}</span>`
-            : "";
-        const err =
-          j.status === "failed" && j.error
-            ? `<span class="queue-error" title="${escapeHtml(j.error)}">${escapeHtml(j.error)}</span>`
-            : "";
-        return `
-          <div class="queue-item${j.id === state.currentJobId ? " selected" : ""}" data-id="${j.id}">
-            <button class="queue-row" type="button" data-select="${j.id}">
-              <span class="queue-thumb">${thumb}</span>
-              <span class="queue-meta">
-                <span class="queue-prompt" title="${escapeHtml(j.prompt)}">${escapeHtml(j.prompt)}</span>
-                <span class="queue-sub">
-                  <span class="chip" data-status="${escapeHtml(j.status)}">${escapeHtml(STATUS_LABELS[j.status] || j.status)}</span>
-                  ${dims}
-                  <span class="queue-time">${escapeHtml(relativeTime(j.updated_at || j.created_at))}</span>
-                </span>
-                ${err}
-              </span>
-            </button>
-            <button class="menu-btn" type="button" data-menu="${j.id}" aria-label="Job actions" aria-expanded="false" aria-haspopup="menu">⋯</button>
-          </div>
-        `;
-      })
-      .join("");
+  if (isActive(j.status)) {
+    return `<span class="spinner" aria-hidden="true"></span>`;
   }
+  return `<span class="meta">${escapeHtml(STATUS_LABELS[j.status] || j.status)}</span>`;
+}
 
+function jobRowHtml(j) {
+  const dims =
+    j.output_width && j.output_height
+      ? `<span class="queue-dims">${j.output_width}×${j.output_height}</span>`
+      : "";
+  const err =
+    j.status === "failed" && j.error
+      ? `<span class="queue-error" title="${escapeHtml(j.error)}">${escapeHtml(j.error)}</span>`
+      : "";
+  return `
+    <div class="queue-item${j.id === state.currentJobId ? " selected" : ""}" data-id="${j.id}" data-fp="${escapeHtml(
+      [
+        j.status,
+        j.updated_at || "",
+        bestUrl(j) || "",
+        j.output_width || "",
+        j.output_height || "",
+      ].join("|")
+    )}">
+      <button class="queue-row" type="button" data-select="${j.id}">
+        <span class="queue-thumb">${thumbHtml(j)}</span>
+        <span class="queue-meta">
+          <span class="queue-prompt" title="${escapeHtml(j.prompt)}">${escapeHtml(j.prompt)}</span>
+          <span class="queue-sub">
+            <span class="chip" data-status="${escapeHtml(j.status)}">${escapeHtml(STATUS_LABELS[j.status] || j.status)}</span>
+            ${dims}
+            <span class="queue-time">${escapeHtml(relativeTime(j.updated_at || j.created_at))}</span>
+          </span>
+          ${err}
+        </span>
+      </button>
+      <button class="menu-btn" type="button" data-menu="${j.id}" aria-label="Job actions" aria-expanded="false" aria-haspopup="menu">⋯</button>
+    </div>
+  `;
+}
+
+function bindQueueEvents(el, handlers) {
   el.querySelectorAll("[data-select]").forEach((btn) => {
-    btn.addEventListener("click", () => onSelect?.(btn.dataset.select));
+    btn.addEventListener("click", () => handlers?.onSelect?.(btn.dataset.select));
   });
   el.querySelectorAll("[data-menu]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
-      if (onOpenMenu) {
-        onOpenMenu(btn.dataset.menu, btn);
+      if (handlers?.onOpenMenu) {
+        handlers.onOpenMenu(btn.dataset.menu, btn);
         return;
       }
       if (state.menuJobId === btn.dataset.menu && !ensureMenu().hidden) {
@@ -184,11 +184,95 @@ export function renderQueue({ onSelect, onMenuAction, onClearFailed, onOpenMenu 
       openJobMenu(btn.dataset.menu, btn);
     });
   });
+}
 
-  if (clearBtn && onClearFailed) {
-    clearBtn.onclick = () => onClearFailed();
+function patchQueueItem(item, j) {
+  item.classList.toggle("selected", j.id === state.currentJobId);
+  const chip = item.querySelector(".chip");
+  if (chip) {
+    chip.dataset.status = j.status;
+    chip.textContent = STATUS_LABELS[j.status] || j.status;
+  }
+  const time = item.querySelector(".queue-time");
+  if (time) time.textContent = relativeTime(j.updated_at || j.created_at);
+
+  const thumb = item.querySelector(".queue-thumb");
+  const src = bestUrl(j);
+  const bust = cacheBust(j);
+  const img = thumb?.querySelector("img");
+  if (src) {
+    if (img && img.dataset.url === src && img.dataset.bust === String(bust)) {
+      // keep
+    } else if (img && img.dataset.url === src) {
+      img.dataset.bust = String(bust);
+      img.src = `${src}?t=${bust}`;
+    } else if (thumb) {
+      thumb.innerHTML = thumbHtml(j);
+    }
+  } else if (thumb && !thumb.querySelector(".spinner") && isActive(j.status)) {
+    thumb.innerHTML = thumbHtml(j);
+  } else if (thumb && !src && !isActive(j.status)) {
+    thumb.innerHTML = thumbHtml(j);
   }
 
+  item.dataset.fp = [j.status, j.updated_at || "", src || "", j.output_width || "", j.output_height || ""].join(
+    "|"
+  );
+}
+
+function tryPatchQueue(el, jobs) {
+  const items = [...el.querySelectorAll(".queue-item")];
+  if (items.length !== jobs.length) return false;
+  for (let i = 0; i < jobs.length; i++) {
+    if (items[i].dataset.id !== jobs[i].id) return false;
+  }
+  jobs.forEach((j, i) => patchQueueItem(items[i], j));
+  return true;
+}
+
+/**
+ * @param {object} handlers
+ * @param {{ force?: boolean }} [opts]
+ */
+export function renderQueue(handlers = {}, opts = {}) {
+  const el = $("queue");
+  if (!el) return;
+  const clearBtn = $("clearFailedBtn");
+  const failed = failedCount();
+  if (clearBtn) {
+    clearBtn.hidden = failed === 0;
+    clearBtn.textContent = `Clear failed (${failed})`;
+    if (handlers.onClearFailed) clearBtn.onclick = () => handlers.onClearFailed();
+  }
+
+  const jobs = sortedJobs().filter(matchesFilter);
+  const fp = queueFingerprint(jobs) + `|sel:${state.currentJobId || ""}|f:${state.queueFilter}`;
+  if (!opts.force && fp === state.lastQueueFp && el.querySelector(".queue-item, .queue-empty")) {
+    // Selection highlight may still need a light touch
+    el.querySelectorAll(".queue-item").forEach((item) => {
+      item.classList.toggle("selected", item.dataset.id === state.currentJobId);
+    });
+    return;
+  }
+
+  if (!opts.force && jobs.length && tryPatchQueue(el, jobs)) {
+    state.lastQueueFp = fp;
+    wireMenu(handlers);
+    return;
+  }
+
+  if (!jobs.length) {
+    el.innerHTML = `<p class="queue-empty">No jobs in this filter.</p>`;
+  } else {
+    el.innerHTML = jobs.map(jobRowHtml).join("");
+    bindQueueEvents(el, handlers);
+  }
+
+  state.lastQueueFp = fp;
+  wireMenu(handlers);
+}
+
+function wireMenu(handlers) {
   const menu = ensureMenu();
   menu.onclick = (e) => {
     const btn = e.target.closest("[data-action]");
@@ -202,13 +286,14 @@ export function renderQueue({ onSelect, onMenuAction, onClearFailed, onOpenMenu 
       return;
     }
     closeJobMenu();
-    onMenuAction?.(action, jobId, projectId);
+    handlers?.onMenuAction?.(action, jobId, projectId);
   };
 }
 
 export async function deleteJob(jobId) {
   await api(`/v1/jobs/${jobId}`, { method: "DELETE" });
   state.jobsById.delete(jobId);
+  state.lastQueueFp = null;
 }
 
 export async function clearFailedJobs() {
@@ -216,6 +301,7 @@ export async function clearFailedJobs() {
   for (const [id, job] of [...state.jobsById.entries()]) {
     if (job.status === "failed") state.jobsById.delete(id);
   }
+  state.lastQueueFp = null;
   toast(`Cleared ${result.removed || 0} failed job(s).`);
   return result;
 }

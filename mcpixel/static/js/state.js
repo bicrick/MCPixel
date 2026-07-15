@@ -24,6 +24,16 @@ export const STATUS_LABELS = {
 
 export const SIZE_PRESETS = [16, 32, 48, 64];
 
+/** Discrete stage weights — no streaming % from providers. */
+export const PROGRESS_BY_STATUS = {
+  queued: 8,
+  generating: 30,
+  removing_background: 60,
+  snapping: 85,
+  completed: 100,
+  failed: 0,
+};
+
 export const state = {
   currentJobId: null,
   mainMode: "empty", // empty | create | job
@@ -39,6 +49,9 @@ export const state = {
   targetHeight: 64,
   menuJobId: null,
   menuMode: "job", // job | project-pick
+  lastQueueFp: null,
+  lastJobFp: null,
+  paintedJobId: null,
 };
 
 export function $(id) {
@@ -47,6 +60,46 @@ export function $(id) {
 
 export function isActive(status) {
   return ACTIVE_STATUSES.has(status);
+}
+
+export function stageFlags(job) {
+  const urls = job?.urls || {};
+  const stages = job?.stages || {};
+  return ["raw", "cutout", "snapped", "edited"]
+    .map((k) => (urls[k] || stages[k] ? k[0] : "-"))
+    .join("");
+}
+
+export function jobFingerprint(job) {
+  if (!job) return "";
+  return [
+    job.id,
+    job.status,
+    job.updated_at || "",
+    stageFlags(job),
+    job.error || "",
+    job.output_width || "",
+    job.output_height || "",
+  ].join("|");
+}
+
+export function queueFingerprint(jobs) {
+  return jobs.map(jobFingerprint).join(";");
+}
+
+export function progressPercent(job) {
+  if (!job) return 0;
+  if (job.status === "failed") {
+    const failedAt = job.stage_error || "generating";
+    const idx = PIPELINE_STEPS.findIndex((s) => s.key === failedAt);
+    if (idx <= 0) return 8;
+    return PROGRESS_BY_STATUS[PIPELINE_STEPS[idx - 1]?.key] || 8;
+  }
+  return PROGRESS_BY_STATUS[job.status] ?? 0;
+}
+
+export function cacheBust(job) {
+  return Date.parse(job?.updated_at || job?.created_at || "") || 0;
 }
 
 export function bestUrl(job) {
