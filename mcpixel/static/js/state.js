@@ -20,6 +20,8 @@ export const STATUS_LABELS = {
   snapping: "snapping",
   completed: "done",
   failed: "failed",
+  cancelled: "cancelled",
+  partial: "partial",
 };
 
 export const SIZE_PRESETS = [16, 32, 48, 64];
@@ -33,10 +35,13 @@ export const PROGRESS_BY_STATUS = {
   snapping: 85,
   completed: 100,
   failed: 0,
+  cancelled: 0,
 };
 
 export const state = {
   currentJobId: null,
+  currentBatchId: null,
+  selectedDirection: null, // N|NE|... when viewing a batch
   mainMode: "empty", // empty | create | job | library
   railTab: "queue", // queue | library
   libraryFilter: "all", // all | unfiled | project id
@@ -51,6 +56,8 @@ export const state = {
   targetMode: "64",
   targetWidth: 64,
   targetHeight: 64,
+  poseMode: "none", // none | topdown8
+  referenceFacing: null, // N|NE|... required before Generate 8
   kMode: "16", // "none" | "2"|"4"|...
   referenceFile: null,
   referenceJobId: null,
@@ -98,7 +105,7 @@ export function queueFingerprint(jobs) {
 
 export function progressPercent(job) {
   if (!job) return 0;
-  if (job.status === "failed") {
+  if (job.status === "failed" || job.status === "cancelled") {
     const failedAt = job.stage_error || "generating";
     const idx = PIPELINE_STEPS.findIndex((s) => s.key === failedAt);
     if (idx <= 0) return 8;
@@ -120,7 +127,9 @@ export function matchesFilter(job) {
   if (state.queueFilter === "all") return true;
   if (state.queueFilter === "active") return isActive(job.status);
   if (state.queueFilter === "done") return job.status === "completed";
-  if (state.queueFilter === "failed") return job.status === "failed";
+  if (state.queueFilter === "failed") {
+    return job.status === "failed" || job.status === "cancelled";
+  }
   return true;
 }
 
@@ -158,7 +167,9 @@ export function anyActive() {
 }
 
 export function failedCount() {
-  return sortedJobs().filter((j) => j.status === "failed").length;
+  return sortedJobs().filter(
+    (j) => j.status === "failed" || j.status === "cancelled"
+  ).length;
 }
 
 export function setStatus(msg) {

@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel, Field
 
 from mcpixel.config import Settings
+from mcpixel.jobs.pool import (
+    MAX_PARALLEL_JOBS,
+    MIN_PARALLEL_JOBS,
+    clamp_parallel_jobs,
+)
 
 
 class AppSettingsFile(BaseModel):
     openai_api_key: str | None = None
     remove_bg_api_key: str | None = None
+    max_parallel_jobs: int | None = None
 
 
 def settings_path(settings: Settings) -> Path:
@@ -52,6 +57,8 @@ def apply_settings_file(
     if file.remove_bg_api_key is not None:
         if overwrite or not settings.remove_bg_api_key:
             settings.remove_bg_api_key = file.remove_bg_api_key or None
+    if file.max_parallel_jobs is not None:
+        settings.max_parallel_jobs = clamp_parallel_jobs(file.max_parallel_jobs)
     return settings
 
 
@@ -65,6 +72,9 @@ def public_settings_view(settings: Settings) -> dict[str, Any]:
     return {
         "openai_api_key": mask(settings.openai_api_key),
         "remove_bg_api_key": mask(settings.remove_bg_api_key),
+        "max_parallel_jobs": clamp_parallel_jobs(settings.max_parallel_jobs),
+        "max_parallel_jobs_min": MIN_PARALLEL_JOBS,
+        "max_parallel_jobs_max": MAX_PARALLEL_JOBS,
         "data_dir": str(settings.data_dir),
         "jobs_dir": str(settings.jobs_dir),
         "openai_image_model": settings.openai_image_model,
@@ -74,5 +84,6 @@ def public_settings_view(settings: Settings) -> dict[str, Any]:
 class SettingsUpdate(BaseModel):
     openai_api_key: str | None = Field(default=None)
     remove_bg_api_key: str | None = Field(default=None)
+    max_parallel_jobs: int | None = Field(default=None)
     clear_openai_api_key: bool = False
     clear_remove_bg_api_key: bool = False

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
-from io import BytesIO
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
 
 import httpx
 
@@ -11,13 +13,6 @@ from mcpixel.jobs.models import BgProvider
 from mcpixel.pipeline.alpha import harden_alpha
 
 logger = logging.getLogger(__name__)
-
-
-@lru_cache(maxsize=2)
-def _rembg_session(model_name: str):
-    from rembg import new_session
-
-    return new_session(model_name)
 
 
 def remove_background(
@@ -31,26 +26,41 @@ def remove_background(
     if provider == BgProvider.remove_bg:
         return _remove_bg_api(image_bytes, settings)
 
-    # rembg_birefnet (default)
-    from rembg import remove
-
-    model = settings.rembg_model
-    try:
-        session = _rembg_session(model)
-        cutout = remove(image_bytes, session=session)
-    except Exception as exc:
-        logger.warning("rembg model %s failed (%s); falling back to u2net", model, exc)
-        session = _rembg_session("u2net")
-        cutout = remove(image_bytes, session=session)
-
-    if isinstance(cutout, bytes):
-        raw = cutout
-    else:
-        buf = BytesIO()
-        cutout.save(buf, format="PNG")
-        raw = buf.getvalue()
-
+    # rembg in a short-lived subprocess so ONNX segfaults do not kill the job worker.
+    raw = _rembg_subprocess(image_bytes, settings.rembg_model)
     return harden_alpha(raw, settings.alpha_harden_threshold)
+
+
+def _rembg_subprocess(image_bytes: bytes, model_name: str) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="mcpixel-rembg-") as tmp:
+        tmp_path = Path(tmp)
+        inp = tmp_path / "in.png"
+        out = tmp_path / "out.png"
+        inp.write_bytes(image_bytes)
+        cmd = [
+            sys.executable,
+            "-m",
+            "mcpixel.pipeline.rembg_worker",
+            str(inp),
+            str(out),
+            model_name,
+        ]
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                timeout=300,
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("rembg timed out after 300s") from exc
+
+        if result.returncode != 0 or not out.exists():
+            err = (result.stderr or result.stdout or b"").decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"rembg worker failed (exit {result.returncode}): {err.strip() or 'no output'}"
+            )
+        return out.read_bytes()
 
 
 def _remove_bg_api(image_bytes: bytes, settings: Settings) -> bytes:

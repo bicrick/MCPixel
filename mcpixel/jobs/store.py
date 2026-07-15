@@ -71,6 +71,14 @@ class JobStore:
         error: str | None = None,
         stage_error: str | None = None,
     ) -> None:
+        # Cooperative cancel: never clobber cancelled with a later pipeline status.
+        if status != JobStatus.cancelled:
+            current = self.get(record.id)
+            if current is not None and current.status == JobStatus.cancelled:
+                record.status = JobStatus.cancelled
+                record.error = current.error
+                record.stage_error = current.stage_error
+                return
         record.status = status
         if error is not None:
             record.error = error
@@ -93,6 +101,8 @@ class JobStore:
     def clear_failed(self) -> int:
         removed = 0
         for job in self.list_jobs(limit=10_000):
-            if job.status == JobStatus.failed and self.delete(job.id):
+            if job.status in {JobStatus.failed, JobStatus.cancelled} and self.delete(
+                job.id
+            ):
                 removed += 1
         return removed

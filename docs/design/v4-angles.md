@@ -1,21 +1,35 @@
 # v4 research: angles / multi-view
 
-Goal: produce facing variants (front / side / back / 3/4) of the same sprite for game use.
+Goal: produce facing variants of the same sprite for game use.
 
-## Approaches
+## Shipped approach (Pose = 8 directions)
 
-1. **Prompt packs** — fixed templates (“same character, side view, …”) with optional size hint; cheapest to ship
-2. **Edit with reference** — `images.edit` using the best existing frame as identity lock
-3. **Local rotate** — only for flat/top-down assets; trivial PIL rotate, useless for side-view characters that need redrawn silhouettes
+**Eight separate jobs**, not one sheet to extract.
 
-## Product sketch
+1. User sets Pose → **8 directions** (or **Create 8 rotations** tab).
+2. **Reference required** — library snapped sprite or file; longest side ≤ **1024px**.
+3. User picks **which way the reference already faces**. That facing becomes the **master** with **no image regenerate** (library snapped copied as-is; file uploads get cutout + snap only).
+4. The master’s snapped sprite is re-passed as reference into the **other seven** jobs, with pose-locked prompts (same pose, rotate facing only).
+5. All eight land in an auto-created project; queue collapses the batch into one row.
 
-- Angle chips on Create or on a completed job: Front / Side / Back / 3-4
-- Batch enqueue N jobs sharing a project + parent job id
-- Optional “match palette” note in the wrapped prompt
+Endpoint: `POST /v1/generate/directions` (JSON or multipart) with `reference_facing`.
 
-## Open questions
+Local geometric rotate is **not** used for characters.
 
-- Whether gpt-image-2 edit refs are strong enough to keep silhouette without a LoRA/custom model
-- How many angles are “enough” for Minecraft-style vs platformer pipelines
-- Should angle jobs inherit rembg/snap settings automatically from the parent
+## Why not a single sheet?
+
+- rembg/snap expect one subject; sheet cells often touch or mis-align
+- GPT Image often ignores freeform grid prompts
+- Scaffold-fill (template PNG → fill cells → crop) is a promising later experiment, not V1
+
+## Later
+
+- Pose = turnaround (front / ¾ / side / back)
+- Sheet download (assemble 8 snapped frames)
+- Per-direction regenerate
+- Animation via image→video→frames
+- Optional ControlNet / video backends for reliability
+
+## Older notes
+
+Approaches considered: prompt packs, edit with reference (chosen), local rotate (rejected for characters).

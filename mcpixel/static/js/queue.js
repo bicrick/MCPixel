@@ -1,5 +1,18 @@
 import { api, escapeHtml } from "./api.js";
 import {
+  aggregateBatchStatus,
+  basePrompt,
+  batchFingerprint,
+  batchIdOf,
+  batchMaster,
+  batchProgressLabel,
+  batchThumbJob,
+  isBatchRowSelected,
+  isDirectionBatch,
+  queueEntriesFromJobs,
+  siblingsForBatch,
+} from "./batch.js";
+import {
   $,
   STATUS_LABELS,
   bestUrl,
@@ -7,7 +20,6 @@ import {
   failedCount,
   isActive,
   matchesFilter,
-  queueFingerprint,
   relativeTime,
   sortedJobs,
   state,
@@ -63,8 +75,16 @@ function fillJobMenu(jobId) {
         })
         .join("")
     : "";
+  const canInPlaceRetry =
+    isDirectionBatch(job) &&
+    (job?.status === "failed" || job?.status === "cancelled");
   menu.innerHTML = `
-    <button type="button" data-action="retry">Retry</button>
+    ${isActive(job?.status) ? `<button type="button" data-action="cancel" class="danger">Cancel</button>` : ""}
+    ${
+      canInPlaceRetry
+        ? `<button type="button" data-action="retry-inplace">Retry facing</button>`
+        : `<button type="button" data-action="retry">Retry</button>`
+    }
     <button type="button" data-action="duplicate">Duplicate</button>
     <button type="button" data-action="resnap">Resnap</button>
     <button type="button" data-action="copy">Copy prompt</button>
@@ -76,11 +96,28 @@ function fillJobMenu(jobId) {
     ${membership}
     <button type="button" data-action="delete" class="danger">Delete</button>
   `;
-  bindProjectSubmenu(menu);
 }
 
-function positionSubmenu(_wrap) {
-  // Inline submenu — no positioning needed
+function fillBatchMenu(masterId) {
+  const menu = ensureMenu();
+  const siblings = siblingsForBatch(batchIdOf(state.jobsById.get(masterId)) || state.currentBatchId);
+  const anyActive = siblings.some((j) => isActive(j.status));
+  const hasIncomplete = siblings.some((j) => j.status !== "completed");
+  const master = batchMaster(siblings) || state.jobsById.get(masterId);
+  menu.innerHTML = `
+    ${anyActive ? `<button type="button" data-action="cancel-batch" class="danger">Cancel batch</button>` : ""}
+    ${
+      !anyActive && hasIncomplete
+        ? `<button type="button" data-action="retry-incomplete">Retry incomplete</button>`
+        : ""
+    }
+    <button type="button" data-action="copy-batch">Copy prompt</button>
+    <div class="menu-sub-wrap">
+      <button type="button" data-action="add-project" aria-haspopup="true" aria-expanded="false">Add master to project…</button>
+      <div class="menu-submenu" hidden role="menu">${projectPickButtons(master?.id || masterId)}</div>
+    </div>
+    <button type="button" data-action="delete-batch" class="danger">Delete batch</button>
+  `;
 }
 
 function openProjectSubmenu(wrap) {
@@ -98,24 +135,11 @@ function closeProjectSubmenu(wrap) {
   trigger?.setAttribute("aria-expanded", "false");
 }
 
-function bindProjectSubmenu(menu) {
-  const wrap = menu.querySelector(".menu-sub-wrap");
-  if (!wrap) return;
-  let leaveTimer = null;
-  const clearLeave = () => {
-    if (leaveTimer) {
-      clearTimeout(leaveTimer);
-      leaveTimer = null;
-    }
-  };
-  wrap.addEventListener("mouseenter", () => {
-    clearLeave();
-    openProjectSubmenu(wrap);
-  });
-  wrap.addEventListener("mouseleave", () => {
-    clearLeave();
-    leaveTimer = setTimeout(() => closeProjectSubmenu(wrap), 180);
-  });
+function toggleProjectSubmenu(wrap) {
+  const sub = wrap?.querySelector(".menu-submenu");
+  if (!sub) return;
+  if (sub.hidden) openProjectSubmenu(wrap);
+  else closeProjectSubmenu(wrap);
 }
 
 function fillProjectPickMenu(jobId = state.menuJobId) {
@@ -131,12 +155,13 @@ function fillProjectActionsMenu(projectId) {
   `;
 }
 
-export function openJobMenu(jobId, anchor) {
+export function openJobMenu(jobId, anchor, opts = {}) {
   const menu = ensureMenu();
   const rect = anchor.getBoundingClientRect();
   state.menuJobId = jobId;
-  state.menuMode = "job";
-  fillJobMenu(jobId);
+  state.menuMode = opts.batch ? "batch" : "job";
+  if (opts.batch) fillBatchMenu(jobId);
+  else fillJobMenu(jobId);
   menu.hidden = false;
   menu.style.top = `${Math.min(window.innerHeight - 320, rect.bottom + 4)}px`;
   menu.style.left = `${Math.max(8, Math.min(window.innerWidth - 180, rect.right - 160))}px`;
@@ -186,8 +211,9 @@ function jobRowHtml(j) {
     j.status === "failed" && j.error
       ? `<span class="queue-error" title="${escapeHtml(j.error)}">${escapeHtml(j.error)}</span>`
       : "";
+  const selected = j.id === state.currentJobId && !state.currentBatchId;
   return `
-    <div class="queue-item${j.id === state.currentJobId ? " selected" : ""}" data-id="${j.id}" data-fp="${escapeHtml(
+    <div class="queue-item${selected ? " selected" : ""}" data-id="${j.id}" data-kind="job" data-fp="${escapeHtml(
       [
         j.status,
         j.updated_at || "",
@@ -213,6 +239,45 @@ function jobRowHtml(j) {
   `;
 }
 
+function batchRowHtml(entry) {
+  const { batchId, master, siblings } = entry;
+  const agg = aggregateBatchStatus(siblings);
+  const thumbJob = batchThumbJob(siblings);
+  const prompt = basePrompt(master);
+  const progress = batchProgressLabel(siblings);
+  const newest = siblings.reduce(
+    (a, b) => ((a.updated_at || a.created_at) > (b.updated_at || b.created_at) ? a : b),
+    master
+  );
+  const selected = isBatchRowSelected(batchId, siblings);
+  const fp = batchFingerprint(siblings);
+  return `
+    <div class="queue-item${selected ? " selected" : ""}" data-id="${master.id}" data-batch="${escapeHtml(
+      batchId
+    )}" data-kind="batch" data-fp="${escapeHtml(fp)}">
+      <button class="queue-row" type="button" data-select="${master.id}" data-select-batch="${escapeHtml(batchId)}">
+        <span class="queue-thumb">${thumbHtml(thumbJob || master)}</span>
+        <span class="queue-meta">
+          <span class="queue-prompt" title="${escapeHtml(prompt)}">${escapeHtml(prompt)}</span>
+          <span class="queue-sub">
+            <span class="chip" data-status="${escapeHtml(agg)}">${escapeHtml(STATUS_LABELS[agg] || agg)}</span>
+            <span class="chip direction-chip">8 dir</span>
+            <span class="queue-dims">${escapeHtml(progress)}</span>
+            <span class="queue-time">${escapeHtml(relativeTime(newest.updated_at || newest.created_at))}</span>
+          </span>
+        </span>
+      </button>
+      <button class="menu-btn" type="button" data-menu="${master.id}" data-menu-batch="${escapeHtml(
+        batchId
+      )}" aria-label="Batch actions" aria-expanded="false" aria-haspopup="menu">⋯</button>
+    </div>
+  `;
+}
+
+function entryHtml(entry) {
+  return entry.kind === "batch" ? batchRowHtml(entry) : jobRowHtml(entry.job);
+}
+
 function bindQueueEvents(el, handlers) {
   el.querySelectorAll("[data-select]").forEach((btn) => {
     btn.addEventListener("click", () => handlers?.onSelect?.(btn.dataset.select));
@@ -220,8 +285,9 @@ function bindQueueEvents(el, handlers) {
   el.querySelectorAll("[data-menu]").forEach((btn) => {
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
+      const isBatch = Boolean(btn.dataset.menuBatch);
       if (handlers?.onOpenMenu) {
-        handlers.onOpenMenu(btn.dataset.menu, btn);
+        handlers.onOpenMenu(btn.dataset.menu, btn, { batch: isBatch });
         return;
       }
       if (state.menuJobId === btn.dataset.menu && !ensureMenu().hidden) {
@@ -229,13 +295,53 @@ function bindQueueEvents(el, handlers) {
         return;
       }
       closeJobMenu();
-      openJobMenu(btn.dataset.menu, btn);
+      openJobMenu(btn.dataset.menu, btn, { batch: isBatch });
     });
   });
 }
 
-function patchQueueItem(item, j) {
-  item.classList.toggle("selected", j.id === state.currentJobId);
+function patchQueueItem(item, entry) {
+  if (entry.kind === "batch") {
+    const { batchId, master, siblings } = entry;
+    const agg = aggregateBatchStatus(siblings);
+    item.classList.toggle("selected", isBatchRowSelected(batchId, siblings));
+    const chip = item.querySelector(".chip:not(.direction-chip)");
+    if (chip) {
+      chip.dataset.status = agg;
+      chip.textContent = STATUS_LABELS[agg] || agg;
+    }
+    const dims = item.querySelector(".queue-dims");
+    if (dims) dims.textContent = batchProgressLabel(siblings);
+    const newest = siblings.reduce(
+      (a, b) => ((a.updated_at || a.created_at) > (b.updated_at || b.created_at) ? a : b),
+      master
+    );
+    const time = item.querySelector(".queue-time");
+    if (time) time.textContent = relativeTime(newest.updated_at || newest.created_at);
+
+    const thumbJob = batchThumbJob(siblings);
+    const thumb = item.querySelector(".queue-thumb");
+    const src = bestUrl(thumbJob || master);
+    const bust = cacheBust(thumbJob || master);
+    const img = thumb?.querySelector("img");
+    if (src) {
+      if (img && img.dataset.url === src && img.dataset.bust === String(bust)) {
+        // keep
+      } else if (img && img.dataset.url === src) {
+        img.dataset.bust = String(bust);
+        img.src = `${src}?t=${bust}`;
+      } else if (thumb) {
+        thumb.innerHTML = thumbHtml(thumbJob || master);
+      }
+    } else if (thumb) {
+      thumb.innerHTML = thumbHtml(thumbJob || master);
+    }
+    item.dataset.fp = batchFingerprint(siblings);
+    return;
+  }
+
+  const j = entry.job;
+  item.classList.toggle("selected", j.id === state.currentJobId && !state.currentBatchId);
   const chip = item.querySelector(".chip");
   if (chip) {
     chip.dataset.status = j.status;
@@ -268,13 +374,34 @@ function patchQueueItem(item, j) {
   );
 }
 
-function tryPatchQueue(el, jobs) {
+function visibleEntries() {
+  const all = sortedJobs();
+  return queueEntriesFromJobs(all).filter((entry) => {
+    if (entry.kind === "job") return matchesFilter(entry.job);
+    return entry.siblings.some(matchesFilter);
+  });
+}
+
+function entriesFingerprint(entries) {
+  return entries
+    .map((e) =>
+      e.kind === "batch"
+        ? `b:${e.batchId}:${batchFingerprint(e.siblings)}`
+        : `j:${e.job.id}:${e.job.status}:${bestUrl(e.job) || ""}`
+    )
+    .join("|");
+}
+
+function tryPatchQueue(el, entries) {
   const items = [...el.querySelectorAll(".queue-item")];
-  if (items.length !== jobs.length) return false;
-  for (let i = 0; i < jobs.length; i++) {
-    if (items[i].dataset.id !== jobs[i].id) return false;
+  if (items.length !== entries.length) return false;
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+    const id = entry.kind === "batch" ? entry.master.id : entry.job.id;
+    const kind = entry.kind;
+    if (items[i].dataset.id !== id || items[i].dataset.kind !== kind) return false;
   }
-  jobs.forEach((j, i) => patchQueueItem(items[i], j));
+  entries.forEach((entry, i) => patchQueueItem(items[i], entry));
   return true;
 }
 
@@ -293,26 +420,32 @@ export function renderQueue(handlers = {}, opts = {}) {
     if (handlers.onClearFailed) clearBtn.onclick = () => handlers.onClearFailed();
   }
 
-  const jobs = sortedJobs().filter(matchesFilter);
-  const fp = queueFingerprint(jobs) + `|sel:${state.currentJobId || ""}|f:${state.queueFilter}`;
+  const entries = visibleEntries();
+  const fp =
+    entriesFingerprint(entries) +
+    `|sel:${state.currentJobId || ""}|batch:${state.currentBatchId || ""}|f:${state.queueFilter}`;
   if (!opts.force && fp === state.lastQueueFp && el.querySelector(".queue-item, .queue-empty")) {
-    // Selection highlight may still need a light touch
     el.querySelectorAll(".queue-item").forEach((item) => {
-      item.classList.toggle("selected", item.dataset.id === state.currentJobId);
+      if (item.dataset.kind === "batch") {
+        const siblings = siblingsForBatch(item.dataset.batch);
+        item.classList.toggle("selected", isBatchRowSelected(item.dataset.batch, siblings));
+      } else {
+        item.classList.toggle("selected", item.dataset.id === state.currentJobId && !state.currentBatchId);
+      }
     });
     return;
   }
 
-  if (!opts.force && jobs.length && tryPatchQueue(el, jobs)) {
+  if (!opts.force && entries.length && tryPatchQueue(el, entries)) {
     state.lastQueueFp = fp;
     wireMenu(handlers);
     return;
   }
 
-  if (!jobs.length) {
+  if (!entries.length) {
     el.innerHTML = `<p class="queue-empty">No jobs in this filter.</p>`;
   } else {
-    el.innerHTML = jobs.map(jobRowHtml).join("");
+    el.innerHTML = entries.map(entryHtml).join("");
     bindQueueEvents(el, handlers);
   }
 
@@ -331,7 +464,7 @@ function wireMenu(handlers) {
     if (action === "add-project") {
       e.preventDefault();
       e.stopPropagation();
-      openProjectSubmenu(btn.closest(".menu-sub-wrap"));
+      toggleProjectSubmenu(btn.closest(".menu-sub-wrap"));
       return;
     }
     e.stopPropagation();
@@ -346,12 +479,34 @@ export async function deleteJob(jobId) {
   state.lastQueueFp = null;
 }
 
+export async function deleteBatch(batchId) {
+  const siblings = siblingsForBatch(batchId);
+  for (const job of siblings) {
+    await api(`/v1/jobs/${job.id}`, { method: "DELETE" });
+    state.jobsById.delete(job.id);
+  }
+  state.lastQueueFp = null;
+  return siblings.length;
+}
+
+export async function cancelJob(jobId) {
+  const job = await api(`/v1/jobs/${jobId}/cancel`, { method: "POST" });
+  state.jobsById.set(job.id, job);
+  // Direction master cancel may cascade — refresh siblings from list when polling next.
+  state.lastQueueFp = null;
+  return job;
+}
+
 export async function clearFailedJobs() {
   const result = await api("/v1/jobs/clear-failed", { method: "POST" });
   for (const [id, job] of [...state.jobsById.entries()]) {
-    if (job.status === "failed") state.jobsById.delete(id);
+    if (job.status === "failed" || job.status === "cancelled") {
+      state.jobsById.delete(id);
+    }
   }
   state.lastQueueFp = null;
   toast(`Cleared ${result.removed || 0} failed job(s).`);
   return result;
 }
+
+export { isDirectionBatch };

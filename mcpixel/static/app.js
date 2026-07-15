@@ -1,5 +1,13 @@
 import { api } from "./js/api.js";
 import {
+  batchIdOf,
+  batchMaster,
+  basePrompt,
+  aggregateBatchStatus,
+  isDirectionBatch,
+  siblingsForBatch,
+} from "./js/batch.js";
+import {
   $,
   anyActive,
   bestUrl,
@@ -17,6 +25,8 @@ import {
 import {
   clearFailedJobs,
   closeJobMenu,
+  cancelJob,
+  deleteBatch,
   deleteJob,
   openJobMenu,
   openProjectMenu,
@@ -38,13 +48,16 @@ import {
   bindCreateDrop,
   bindCreateMenu,
   bindKChips,
+  bindPoseChips,
   bindReferenceControls,
   bindSizeChips,
   closeChooseRefMenu,
   closeRefPicker,
   generateJob,
   openRefPicker,
+  retryBatchIncomplete,
   retryFromJob,
+  retryJobInPlace,
   setReferenceFile,
   setTargetFromJob,
 } from "./js/generate.js";
@@ -64,13 +77,13 @@ const queueHandlers = {
   onSelect: (id) => selectJob(id, { fromLibrary: false }),
   onMenuAction: (action, id, projectId) => handleMenuAction(action, id, projectId),
   onClearFailed: () => handleClearFailed(),
-  onOpenMenu: (id, btn) => {
+  onOpenMenu: (id, btn, opts = {}) => {
     if (state.menuJobId === id && !document.getElementById("jobMenu")?.hidden) {
       closeJobMenu();
       return;
     }
     closeJobMenu();
-    openJobMenu(id, btn);
+    openJobMenu(id, btn, opts);
   },
   onProjectMenu: (projectId, btn) => {
     closeJobMenu();
@@ -83,6 +96,24 @@ const libraryHandlers = {
   onSelect: (id) => selectJob(id, { fromLibrary: true }),
   onDropJob: (projectId, jobId) => handleDropJobOnProject(projectId, jobId),
 };
+
+/** Last aggregate status for the open batch — used to toast on crash/partial. */
+let lastKnownBatchAgg = null;
+
+function maybeToastBatchFailure(siblings) {
+  if (!siblings?.length) return;
+  const agg = aggregateBatchStatus(siblings);
+  if (
+    lastKnownBatchAgg === "generating" &&
+    (agg === "failed" || agg === "partial")
+  ) {
+    const err =
+      siblings.find((j) => j.status === "failed" && j.error)?.error ||
+      "One or more directions failed.";
+    toast(err);
+  }
+  lastKnownBatchAgg = agg;
+}
 
 function refreshLibraryChrome() {
   renderLibraryFilters(libraryHandlers, { force: true });
@@ -110,14 +141,24 @@ function updateActiveBadge() {
   if (tab) tab.textContent = n ? `Queue (${n})` : "Queue";
 }
 
+function masterIdForJob(job) {
+  if (!isDirectionBatch(job)) return job.id;
+  const siblings = siblingsForBatch(batchIdOf(job));
+  return batchMaster(siblings)?.id || job.id;
+}
+
 async function selectJob(id, { mobileSwitch = true, fromLibrary = false } = {}) {
   try {
     if (fromLibrary) state.libraryReturn = true;
     else state.libraryReturn = false;
     const job = await api(`/v1/jobs/${id}`);
+    if (isDirectionBatch(job)) {
+      state.selectedDirection = job.extra?.direction || state.selectedDirection;
+    }
     renderJob(job, queueHandlers, { force: true });
     setTargetFromJob(job);
-    history.replaceState(null, "", `/?job=${id}`);
+    const urlId = isDirectionBatch(job) ? masterIdForJob(job) : id;
+    history.replaceState(null, "", `/?job=${urlId}`);
     if (mobileSwitch) setMobileTab("job");
     ensurePolling();
     updateActiveBadge();
@@ -133,9 +174,23 @@ async function refreshQueue() {
   updateActiveBadge();
 
   const listFp =
-    queueFingerprint(sortedJobs()) + `|sel:${state.currentJobId || ""}|f:${state.queueFilter}`;
+    queueFingerprint(sortedJobs()) +
+    `|sel:${state.currentJobId || ""}|batch:${state.currentBatchId || ""}|f:${state.queueFilter}`;
 
-  if (state.mainMode === "job" && state.currentJobId && state.jobsById.has(state.currentJobId)) {
+  if (state.mainMode === "job" && state.currentBatchId) {
+    const siblings = siblingsForBatch(state.currentBatchId);
+    maybeToastBatchFailure(siblings);
+    const focus =
+      siblings.find((j) => j.id === state.currentJobId) ||
+      batchMaster(siblings) ||
+      siblings[0];
+    if (focus) {
+      renderJob(focus, queueHandlers);
+    } else if (listFp !== state.lastQueueFp) {
+      renderQueue(queueHandlers);
+      refreshLibraryChrome();
+    }
+  } else if (state.mainMode === "job" && state.currentJobId && state.jobsById.has(state.currentJobId)) {
     const detail = await api(`/v1/jobs/${state.currentJobId}`);
     const detailFp = jobFingerprint(detail);
     if (detailFp !== state.lastJobFp || state.paintedJobId !== detail.id) {
@@ -178,15 +233,33 @@ async function loadHealth() {
   }
 }
 
-async function afterNewJob(job) {
-  upsertJob(job);
+async function afterNewJob(jobOrBatch) {
+  // Directions batch returns { jobs: [...], master_job_id }
+  const jobs = Array.isArray(jobOrBatch?.jobs) ? jobOrBatch.jobs : [jobOrBatch];
+  const masterId = jobOrBatch?.master_job_id || jobs[0]?.id;
+  for (const job of jobs) {
+    if (job?.id) upsertJob(job);
+  }
+  await loadProjects();
   state.lastQueueFp = null;
   state.libraryReturn = false;
-  renderJob(job, queueHandlers, { force: true });
-  history.replaceState(null, "", `/?job=${job.id}`);
+  const focus = jobs.find((j) => j.id === masterId) || jobs[0];
+  if (focus) {
+    if (isDirectionBatch(focus)) {
+      state.selectedDirection = focus.extra?.direction || "S";
+      lastKnownBatchAgg = null;
+    }
+    renderJob(focus, queueHandlers, { force: true });
+    history.replaceState(null, "", `/?job=${masterIdForJob(focus)}`);
+  }
   setMobileTab("job");
+  setRailTab("queue");
   ensurePolling();
   updateActiveBadge();
+  refreshLibraryChrome();
+  if (jobOrBatch?.jobs?.length) {
+    toast(`Queued ${jobOrBatch.jobs.length} direction jobs.`);
+  }
 }
 
 async function handleDropJobOnProject(projectId, jobId) {
@@ -235,6 +308,67 @@ async function handleMenuAction(action, jobId, projectId) {
     const job = jobId
       ? state.jobsById.get(jobId) || (await api(`/v1/jobs/${jobId}`))
       : null;
+
+    if (action === "cancel-batch" && jobId) {
+      const cancelled = await cancelJob(jobId);
+      upsertJob(cancelled);
+      state.lastJobFp = null;
+      await refreshQueue();
+      toast("Batch cancelled.");
+      updateActiveBadge();
+      return;
+    }
+    if (action === "retry-incomplete" && jobId) {
+      const result = await retryBatchIncomplete(jobId);
+      for (const j of result.jobs || []) upsertJob(j);
+      state.lastJobFp = null;
+      lastKnownBatchAgg = null;
+      await refreshQueue();
+      toast(`Retried ${result.retried || 0} direction(s).`);
+      updateActiveBadge();
+      return;
+    }
+    if (action === "retry-inplace" && jobId) {
+      const updated = await retryJobInPlace(jobId);
+      upsertJob(updated);
+      state.lastJobFp = null;
+      lastKnownBatchAgg = null;
+      renderJob(updated, queueHandlers, { force: true });
+      await refreshQueue();
+      toast("Facing re-queued.");
+      updateActiveBadge();
+      return;
+    }
+    if (action === "copy-batch" && job) {
+      await navigator.clipboard.writeText(basePrompt(job));
+      toast("Prompt copied.");
+      return;
+    }
+    if (action === "delete-batch" && job) {
+      const bid = batchIdOf(job);
+      const siblings = siblingsForBatch(bid);
+      const ok = await confirmDialog(
+        `Delete all ${siblings.length} direction jobs?\n${basePrompt(job)}`,
+        { title: "Delete batch", confirmLabel: "Delete", danger: true }
+      );
+      if (!ok) return;
+      await deleteBatch(bid);
+      if (state.currentBatchId === bid || siblings.some((j) => j.id === state.currentJobId)) {
+        if (state.libraryReturn) {
+          setRailTab("library");
+          showLibraryExplorer(libraryHandlers);
+        } else {
+          clearSelection(queueHandlers);
+          history.replaceState(null, "", "/");
+        }
+      } else {
+        renderQueue(queueHandlers);
+        refreshLibraryChrome();
+      }
+      toast("Batch deleted.");
+      updateActiveBadge();
+      return;
+    }
 
     if (action === "retry" || action === "duplicate") {
       const created = await retryFromJob(job);
@@ -286,6 +420,18 @@ async function handleMenuAction(action, jobId, projectId) {
       toast("Removed from project.");
       return;
     }
+    if (action === "cancel" && jobId) {
+      const cancelled = await cancelJob(jobId);
+      upsertJob(cancelled);
+      if (state.currentJobId === jobId || state.currentBatchId === batchIdOf(job)) {
+        state.lastJobFp = null;
+        renderJob(cancelled, queueHandlers, { force: true });
+      }
+      await refreshQueue();
+      toast("Cancelled.");
+      updateActiveBadge();
+      return;
+    }
     if (action === "delete") {
       const ok = await confirmDialog(`Delete job permanently?\n${job.prompt || jobId}`, {
         title: "Delete job",
@@ -293,9 +439,18 @@ async function handleMenuAction(action, jobId, projectId) {
         danger: true,
       });
       if (!ok) return;
+      const bid = batchIdOf(job);
       await deleteJob(jobId);
       if (state.currentJobId === jobId) {
-        if (state.libraryReturn) {
+        if (bid && siblingsForBatch(bid).length) {
+          const next = batchMaster(siblingsForBatch(bid)) || siblingsForBatch(bid)[0];
+          if (next) {
+            await selectJob(next.id, { fromLibrary: state.libraryReturn });
+          } else {
+            clearSelection(queueHandlers);
+            history.replaceState(null, "", "/");
+          }
+        } else if (state.libraryReturn) {
           setRailTab("library");
           showLibraryExplorer(libraryHandlers);
         } else {
@@ -387,6 +542,7 @@ function openLibraryWorkspace() {
 
 function bindUi() {
   bindSizeChips();
+  bindPoseChips();
   bindKChips();
   bindEditorEvents();
   bindSettings(() => loadHealth());
@@ -431,6 +587,51 @@ function bindUi() {
       .catch((e) => toast(e.message))
   );
   $("resnapBtn").addEventListener("click", () => resnap());
+  $("retryFacingBtn")?.addEventListener("click", () => {
+    if (!state.currentJobId) return;
+    retryJobInPlace(state.currentJobId)
+      .then(async (updated) => {
+        upsertJob(updated);
+        state.lastJobFp = null;
+        lastKnownBatchAgg = null;
+        renderJob(updated, queueHandlers, { force: true });
+        await refreshQueue();
+        toast("Facing re-queued.");
+        updateActiveBadge();
+      })
+      .catch((e) => toast(e.message));
+  });
+  $("retryIncompleteBtn")?.addEventListener("click", () => {
+    const id = state.currentJobId || batchMaster(siblingsForBatch(state.currentBatchId))?.id;
+    if (!id) return;
+    retryBatchIncomplete(id)
+      .then(async (result) => {
+        for (const j of result.jobs || []) upsertJob(j);
+        state.lastJobFp = null;
+        lastKnownBatchAgg = null;
+        await refreshQueue();
+        toast(`Retried ${result.retried || 0} direction(s).`);
+        updateActiveBadge();
+      })
+      .catch((e) => toast(e.message));
+  });
+  $("cancelJobBtn")?.addEventListener("click", () => {
+    if (!state.currentJobId && !state.currentBatchId) return;
+    const targetId = state.currentBatchId
+      ? batchMaster(siblingsForBatch(state.currentBatchId))?.id || state.currentJobId
+      : state.currentJobId;
+    if (!targetId) return;
+    cancelJob(targetId)
+      .then(async (cancelled) => {
+        upsertJob(cancelled);
+        state.lastJobFp = null;
+        renderJob(cancelled, queueHandlers, { force: true });
+        await refreshQueue();
+        toast(state.currentBatchId ? "Batch cancelled." : "Cancelled.");
+        updateActiveBadge();
+      })
+      .catch((e) => toast(e.message));
+  });
   $("editBtn").addEventListener("click", () =>
     openEditor((job) => renderJob(job, queueHandlers)).catch((e) => toast(e.message))
   );

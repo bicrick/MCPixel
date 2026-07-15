@@ -3,16 +3,20 @@ from __future__ import annotations
 import base64
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from mcpixel.jobs.models import (
     BgProvider,
+    DirectionsRequest,
     GenerateRequest,
     JobRecord,
+    JobStatus,
     ResnapRequest,
 )
+from mcpixel.jobs.pool import JobPool, clamp_parallel_jobs
 from mcpixel.jobs.runner import JobRunner
 from mcpixel.jobs.store import JobStore
 from mcpixel.projects import ProjectStore
@@ -43,6 +47,10 @@ def _projects(request: Request) -> ProjectStore:
 
 def _settings(request: Request):
     return request.app.state.settings
+
+
+def _job_pool(request: Request) -> JobPool:
+    return request.app.state.job_pool
 
 
 def enrich(job: JobRecord, base_url: str, projects: ProjectStore | None = None) -> dict:
@@ -88,8 +96,11 @@ def update_settings(body: SettingsUpdate, request: Request) -> dict:
         data["remove_bg_api_key"] = ""
     elif body.remove_bg_api_key is not None and body.remove_bg_api_key.strip():
         data["remove_bg_api_key"] = body.remove_bg_api_key.strip()
+    if body.max_parallel_jobs is not None:
+        data["max_parallel_jobs"] = clamp_parallel_jobs(body.max_parallel_jobs)
     saved = save_settings_file(settings, AppSettingsFile.model_validate(data))
     apply_settings_file(settings, saved, overwrite=True)
+    _job_pool(request).set_max_workers(settings.max_parallel_jobs)
     return public_settings_view(settings)
 
 
@@ -114,7 +125,6 @@ def refine_prompt(body: PromptRefineRequest, request: Request) -> dict:
 @router.post("/generate")
 def generate(
     body: GenerateRequest,
-    background_tasks: BackgroundTasks,
     request: Request,
 ) -> dict:
     runner = _runner(request)
@@ -122,13 +132,89 @@ def generate(
         record = runner.start_generate(body)
     except FileNotFoundError as exc:
         raise HTTPException(404, str(exc)) from exc
-    background_tasks.add_task(runner.run_generate, record.id)
+    _job_pool(request).submit("generate", record.id)
     return enrich(record, _settings(request).public_base_url, _projects(request))
+
+
+@router.post("/generate/directions")
+async def generate_directions(
+    request: Request,
+) -> dict:
+    """
+    Batch top-down 8 directions.
+    JSON body (DirectionsRequest) or multipart with reference file + form fields.
+    Requires a reference image (file or reference_job_id), longest side ≤ 1024px.
+    Reference facing becomes the master (no image gen); remaining 7 are generated.
+    """
+    content_type = (request.headers.get("content-type") or "").lower()
+    runner = _runner(request)
+    projects = _projects(request)
+    ref_bytes: bytes | None = None
+
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            prompt_text = str(form.get("prompt") or "").strip()
+            ref_file = form.get("reference")
+            if hasattr(ref_file, "read"):
+                ref_bytes = await ref_file.read()  # type: ignore[union-attr]
+            k_raw = form.get("k_colors")
+            if k_raw is None or k_raw == "" or str(k_raw).lower() == "none":
+                k_val: int | None = None
+            else:
+                k_val = int(str(k_raw))
+            px_raw = form.get("pixel_size")
+            px_val = float(str(px_raw)) if px_raw not in (None, "") else None
+            wrap = str(form.get("wrap_prompt", "false")).lower() in {"1", "true", "yes"}
+            bg = BgProvider(str(form.get("bg_provider") or BgProvider.rembg_birefnet.value))
+            tw = form.get("target_width")
+            th = form.get("target_height")
+            ref_job = form.get("reference_job_id")
+            facing = str(form.get("reference_facing") or "S").strip() or "S"
+            body = DirectionsRequest(
+                prompt=prompt_text,
+                pose="topdown8",
+                k_colors=k_val,
+                pixel_size=px_val,
+                bg_provider=bg,
+                wrap_prompt=wrap,
+                target_width=int(str(tw)) if tw not in (None, "") else None,
+                target_height=int(str(th)) if th not in (None, "") else None,
+                reference_job_id=str(ref_job) if ref_job not in (None, "") else None,
+                reference_stage="snapped",
+                project_name=str(form.get("project_name") or "") or None,
+                reference_facing=facing,
+            )
+        else:
+            payload = await request.json()
+            body = DirectionsRequest.model_validate(payload)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    try:
+        records = runner.start_directions(body, projects, reference_bytes=ref_bytes)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+    master = next(r for r in records if r.extra.get("direction_role") == "master")
+    _job_pool(request).submit("directions", master.id)
+    base = _settings(request).public_base_url
+    return {
+        "pose": body.pose.value,
+        "batch_id": master.extra.get("direction_batch_id"),
+        "project_id": master.extra.get("project_id"),
+        "master_job_id": master.id,
+        "reference_facing": master.extra.get("direction"),
+        "jobs": [enrich(r, base, projects) for r in records],
+    }
 
 
 @router.post("/generate/with-reference")
 async def generate_with_reference(
-    background_tasks: BackgroundTasks,
     request: Request,
 ) -> dict:
     """Multipart generate: form fields + reference image file."""
@@ -170,7 +256,7 @@ async def generate_with_reference(
 
     runner = _runner(request)
     record = runner.start_generate(body, reference_bytes=ref_bytes)
-    background_tasks.add_task(runner.run_generate, record.id)
+    _job_pool(request).submit("generate", record.id)
     return enrich(record, _settings(request).public_base_url, _projects(request))
 
 
@@ -224,7 +310,6 @@ def get_stage(job_id: str, stage: str, request: Request) -> FileResponse:
 def resnap(
     job_id: str,
     body: ResnapRequest,
-    background_tasks: BackgroundTasks,
     request: Request,
 ) -> dict:
     try:
@@ -233,8 +318,65 @@ def resnap(
         raise HTTPException(404, str(exc)) from exc
     except RuntimeError as exc:
         raise HTTPException(409, str(exc)) from exc
-    background_tasks.add_task(_runner(request).run_resnap, job_id)
+    _job_pool(request).submit("resnap", job_id)
     return enrich(job, _settings(request).public_base_url, _projects(request))
+
+
+@router.post("/jobs/{job_id}/cancel")
+def cancel_job(job_id: str, request: Request) -> dict:
+    try:
+        job = _runner(request).cancel_job(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    pool = _job_pool(request)
+    pool.cancel(job_id)
+    # Direction master cancel also marks children cancelled — drop them from the pool.
+    if job.extra.get("direction_role") == "master":
+        batch_id = job.extra.get("direction_batch_id")
+        for sibling in _store(request).list_jobs(limit=200):
+            if sibling.extra.get("direction_batch_id") != batch_id:
+                continue
+            if sibling.id == job_id:
+                continue
+            if sibling.status == JobStatus.cancelled:
+                pool.cancel(sibling.id)
+    return enrich(job, _settings(request).public_base_url, _projects(request))
+
+
+@router.post("/jobs/{job_id}/retry")
+def retry_job(job_id: str, request: Request) -> dict:
+    """Re-queue a failed/cancelled job in place (same id / batch membership)."""
+    try:
+        job, kind = _runner(request).retry_job(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    _job_pool(request).submit(kind, job.id)  # type: ignore[arg-type]
+    return enrich(job, _settings(request).public_base_url, _projects(request))
+
+
+@router.post("/jobs/{job_id}/batch/retry-incomplete")
+def retry_batch_incomplete(job_id: str, request: Request) -> dict:
+    """Re-queue only non-completed facings in a direction batch."""
+    try:
+        records, submits = _runner(request).retry_batch_incomplete(job_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    pool = _job_pool(request)
+    for kind, jid in submits:
+        pool.submit(kind, jid)  # type: ignore[arg-type]
+    base = _settings(request).public_base_url
+    projects = _projects(request)
+    return {
+        "ok": True,
+        "retried": len(submits),
+        "jobs": [enrich(r, base, projects) for r in records],
+    }
 
 
 @router.post("/jobs/{job_id}/edit")
@@ -267,12 +409,15 @@ async def process_upload(
     data = await file.read()
     if not data:
         raise HTTPException(400, "Empty upload")
-    job = _runner(request).process_upload(
+    runner = _runner(request)
+    prompt = file.filename or "(upload)"
+    job = await run_in_threadpool(
+        runner.process_upload,
         data,
-        k_colors=k_colors,
-        pixel_size=pixel_size,
-        bg_provider=bg_provider,
-        prompt=file.filename or "(upload)",
+        k_colors,
+        pixel_size,
+        bg_provider,
+        prompt,
     )
     return enrich(job, _settings(request).public_base_url, _projects(request))
 

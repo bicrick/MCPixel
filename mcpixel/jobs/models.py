@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class JobStatus(str, Enum):
@@ -14,6 +14,17 @@ class JobStatus(str, Enum):
     snapping = "snapping"
     completed = "completed"
     failed = "failed"
+    cancelled = "cancelled"
+
+
+ACTIVE_JOB_STATUSES = frozenset(
+    {
+        JobStatus.queued,
+        JobStatus.generating,
+        JobStatus.removing_background,
+        JobStatus.snapping,
+    }
+)
 
 
 class BgProvider(str, Enum):
@@ -38,6 +49,44 @@ class GenerateRequest(BaseModel):
     target_height: int | None = Field(default=None, ge=1, le=1024)
     reference_job_id: str | None = None
     reference_stage: str | None = None
+
+    def model_post_init(self, __context) -> None:
+        if self.k_colors is not None and not (2 <= self.k_colors <= 64):
+            raise ValueError("k_colors must be between 2 and 64, or null")
+        if self.reference_stage and self.reference_stage not in {
+            "snapped",
+            "edited",
+            "cutout",
+            "raw",
+        }:
+            raise ValueError("invalid reference_stage")
+
+
+class PoseMode(str, Enum):
+    none = "none"
+    topdown8 = "topdown8"
+
+
+_DIRECTION_FACINGS = frozenset({"N", "NE", "E", "SE", "S", "SW", "W", "NW"})
+
+
+class DirectionsRequest(GenerateRequest):
+    """8-direction batch. Reference + facing required; prompt is optional label only."""
+
+    prompt: str = Field(default="", min_length=0)
+    pose: PoseMode = PoseMode.topdown8
+    project_name: str | None = None
+    reference_facing: str = "S"
+
+    @field_validator("reference_facing", mode="before")
+    @classmethod
+    def _normalize_facing(cls, value: object) -> str:
+        facing = str(value or "S").strip().upper()
+        if facing not in _DIRECTION_FACINGS:
+            raise ValueError(
+                f"reference_facing must be one of: {', '.join(sorted(_DIRECTION_FACINGS))}"
+            )
+        return facing
 
     def model_post_init(self, __context) -> None:
         if self.k_colors is not None and not (2 <= self.k_colors <= 64):

@@ -95,7 +95,7 @@
         <section id="createView" class="create-view" hidden>
           <div class="create-mode-bar" role="tablist" aria-label="Create mode">
             <button type="button" class="create-mode-tab active" data-create-mode="sprite" role="tab" aria-selected="true">Create sprite</button>
-            <button type="button" class="create-mode-tab" data-create-mode="rotations" role="tab" disabled>Create 8 rotations <span class="soon">Coming soon</span></button>
+            <button type="button" class="create-mode-tab" data-create-mode="rotations" role="tab">Create 8 rotations</button>
             <button type="button" class="create-mode-tab" data-create-mode="animation" role="tab" disabled>Create animation <span class="soon">Coming in v5</span></button>
             <button type="button" class="create-mode-tab" data-create-mode="rotations-animation" role="tab" disabled>8 rotations + animation <span class="soon">Coming in v5</span></button>
           </div>
@@ -105,11 +105,11 @@
           </div>
           <div class="create-layout">
             <div class="create-main-col">
-              <div class="prompt-field">
+              <div class="prompt-field" id="promptField">
                 <div class="prompt-field-head">
                   <span class="field-label">
-                    Prompt
-                    <button type="button" class="info-tip" data-tip="Describe the sprite you want. Be concrete about view, palette, and shape. Use ✦ to polish the wording with AI." aria-label="About Prompt">i</button>
+                    <span id="promptFieldLabel">Prompt</span>
+                    <button type="button" class="info-tip" id="promptInfoTip" data-tip="Describe the sprite you want. Be concrete about view, palette, and shape. Use ✦ to polish the wording with AI." aria-label="About Prompt">i</button>
                   </span>
                 </div>
                 <div class="prompt-wrap">
@@ -121,9 +121,9 @@
                 <div class="reference-head">
                   <span class="field-label">
                     Reference image
-                    <button type="button" class="info-tip" data-tip="Optional. Sends an image with your prompt so GPT Image can match style or pose (images.edit). Pick from library, disk, or clipboard." aria-label="About Reference image">i</button>
+                    <button type="button" class="info-tip" id="referenceInfoTip" data-tip="Optional. Sends an image with your prompt so GPT Image can match style or pose (images.edit). Pick from library, disk, or clipboard." aria-label="About Reference image">i</button>
                   </span>
-                  <span class="meta-inline">Optional</span>
+                  <span class="meta-inline" id="referenceOptionalLabel">Optional</span>
                 </div>
                 <div class="reference-card" id="referenceCard">
                   <div class="reference-thumb-wrap" id="referenceThumbWrap">
@@ -131,7 +131,7 @@
                     <span class="reference-placeholder" id="referencePlaceholder">No reference</span>
                   </div>
                   <div class="reference-card-body">
-                    <p id="referenceLabel" class="reference-label">Optional — add a reference from library, files, or clipboard</p>
+                    <p id="referenceLabel" class="reference-label">Add a reference from library, files, or clipboard</p>
                     <div class="reference-controls">
                       <div class="choose-wrap" id="chooseRefWrap">
                         <button type="button" id="chooseRefBtn" class="secondary" aria-haspopup="menu" aria-expanded="false">Choose</button>
@@ -167,6 +167,61 @@
                   <span>×</span>
                   <input id="customH" type="number" min="1" max="1024" placeholder="H" />
                 </div>
+              </div>
+              <div class="size-row pose-row">
+                <span class="field-label">
+                  Pose
+                  <button type="button" class="info-tip" data-tip="None = one sprite. 8 directions = pick a reference and which way it faces; that facing is kept as-is and the other seven are generated with the same pose, rotated." aria-label="About Pose">i</button>
+                </span>
+                <div class="chip-row" id="poseChips">
+                  <button type="button" class="pose-chip active" data-pose="none">None</button>
+                  <button type="button" class="pose-chip" data-pose="topdown8">8 directions</button>
+                </div>
+                <p class="meta pose-hint" id="poseHint" hidden>Needs a reference (library or file), longest side ≤ 1024px. Pick which way the reference already faces.</p>
+              </div>
+              <div class="size-row facing-row" id="facingRow" hidden>
+                <span class="field-label">
+                  Reference facing
+                  <button type="button" class="info-tip" data-tip="Which compass direction is the reference sprite already facing? That tile is used as-is (no regenerate). The other seven rotate that same pose." aria-label="About Reference facing">i</button>
+                </span>
+                <div class="facing-compass facing-empty" id="facingChips" role="group" aria-label="Reference facing">
+                  <svg class="facing-pie" viewBox="0 0 100 100">
+                    <g class="facing-chip" data-facing="N" role="button" tabindex="0" aria-label="North">
+                      <path d="M 32.78 8.43 A 45 45 0 0 1 67.22 8.43 L 55.74 36.14 A 15 15 0 0 0 44.26 36.14 Z" />
+                      <text x="50" y="20" text-anchor="middle" dominant-baseline="middle">N</text>
+                    </g>
+                    <g class="facing-chip" data-facing="NE" role="button" tabindex="0" aria-label="Northeast">
+                      <path d="M 67.22 8.43 A 45 45 0 0 1 91.57 32.78 L 63.86 44.26 A 15 15 0 0 0 55.74 36.14 Z" />
+                      <text x="71.2" y="28.8" text-anchor="middle" dominant-baseline="middle">NE</text>
+                    </g>
+                    <g class="facing-chip" data-facing="E" role="button" tabindex="0" aria-label="East">
+                      <path d="M 91.57 32.78 A 45 45 0 0 1 91.57 67.22 L 63.86 55.74 A 15 15 0 0 0 63.86 44.26 Z" />
+                      <text x="80" y="50" text-anchor="middle" dominant-baseline="middle">E</text>
+                    </g>
+                    <g class="facing-chip" data-facing="SE" role="button" tabindex="0" aria-label="Southeast">
+                      <path d="M 91.57 67.22 A 45 45 0 0 1 67.22 91.57 L 55.74 63.86 A 15 15 0 0 0 63.86 55.74 Z" />
+                      <text x="71.2" y="71.2" text-anchor="middle" dominant-baseline="middle">SE</text>
+                    </g>
+                    <g class="facing-chip" data-facing="S" role="button" tabindex="0" aria-label="South">
+                      <path d="M 67.22 91.57 A 45 45 0 0 1 32.78 91.57 L 44.26 63.86 A 15 15 0 0 0 55.74 63.86 Z" />
+                      <text x="50" y="80" text-anchor="middle" dominant-baseline="middle">S</text>
+                    </g>
+                    <g class="facing-chip" data-facing="SW" role="button" tabindex="0" aria-label="Southwest">
+                      <path d="M 32.78 91.57 A 45 45 0 0 1 8.43 67.22 L 36.14 55.74 A 15 15 0 0 0 44.26 63.86 Z" />
+                      <text x="28.8" y="71.2" text-anchor="middle" dominant-baseline="middle">SW</text>
+                    </g>
+                    <g class="facing-chip" data-facing="W" role="button" tabindex="0" aria-label="West">
+                      <path d="M 8.43 67.22 A 45 45 0 0 1 8.43 32.78 L 36.14 44.26 A 15 15 0 0 0 36.14 55.74 Z" />
+                      <text x="20" y="50" text-anchor="middle" dominant-baseline="middle">W</text>
+                    </g>
+                    <g class="facing-chip" data-facing="NW" role="button" tabindex="0" aria-label="Northwest">
+                      <path d="M 8.43 32.78 A 45 45 0 0 1 32.78 8.43 L 44.26 36.14 A 15 15 0 0 0 36.14 44.26 Z" />
+                      <text x="28.8" y="28.8" text-anchor="middle" dominant-baseline="middle">NW</text>
+                    </g>
+                    <circle class="facing-hub" cx="50" cy="50" r="14.5" />
+                  </svg>
+                </div>
+                <p class="meta facing-hint" id="facingHint">Select which way the reference faces.</p>
               </div>
               <div class="actions create-actions">
                 <button id="generateBtn" type="button">Generate</button>
@@ -232,7 +287,6 @@
             <span id="jobStatus" class="badge"></span>
           </div>
 
-          <ol class="stepper" id="stepper" aria-label="Pipeline progress"></ol>
           <div
             class="job-progress"
             id="jobProgress"
@@ -246,37 +300,55 @@
             <div class="job-progress-fill" id="jobProgressFill"></div>
           </div>
 
-          <div class="hero-preview">
-            <div class="hero-frame" id="heroFrame">
-              <p class="meta hero-placeholder">Waiting for output…</p>
+          <div id="singleJobLayout">
+            <ol class="stepper" id="stepper" aria-label="Pipeline progress"></ol>
+
+            <div class="hero-preview">
+              <div class="hero-frame" id="heroFrame">
+                <p class="meta hero-placeholder">Waiting for output…</p>
+              </div>
             </div>
-            <div class="hero-actions">
-              <div class="row resnap-row">
-                <label>
-                  <span class="field-label">
-                    Resnap k
-                    <button type="button" class="info-tip" data-tip="Palette size after snap (2–64). Lower = fewer colors." aria-label="About Resnap k">i</button>
-                  </span>
-                  <input id="resnapK" type="number" min="2" max="64" value="16" />
-                </label>
-                <label>
-                  <span class="field-label">
-                    Pixel size
-                    <button type="button" class="info-tip" data-tip="Source pixels per output pixel. Lower = finer detail / larger canvas. Leave empty to auto-detect from the cutout." aria-label="About Pixel size">i</button>
-                  </span>
-                  <input id="resnapPx" type="number" min="1" step="1" placeholder="auto" />
-                </label>
+
+            <div class="stage-strip" id="stages"></div>
+          </div>
+
+          <div id="batchJobLayout" class="batch-job-layout" hidden>
+            <div id="directionsGrid" class="directions-grid" role="group" aria-label="Directions"></div>
+            <div class="batch-detail">
+              <div class="hero-frame batch-hero-frame" id="batchHeroFrame">
+                <p class="meta hero-placeholder">Select a direction</p>
               </div>
-              <div class="actions">
-                <button id="resnapBtn" type="button">Resnap</button>
-                <button id="editBtn" type="button" class="secondary">Edit</button>
-                <a id="downloadBtn" class="file-btn download-btn" href="#" download hidden>Download</a>
-              </div>
-              <p id="metaLine" class="meta"></p>
+              <div class="stage-strip" id="batchStages"></div>
             </div>
           </div>
 
-          <div class="stage-strip" id="stages"></div>
+          <div class="hero-actions job-actions">
+            <div class="row resnap-row">
+              <label>
+                <span class="field-label">
+                  Resnap k
+                  <button type="button" class="info-tip" data-tip="Palette size after snap (2–64). Lower = fewer colors." aria-label="About Resnap k">i</button>
+                </span>
+                <input id="resnapK" type="number" min="2" max="64" value="16" />
+              </label>
+              <label>
+                <span class="field-label">
+                  Pixel size
+                  <button type="button" class="info-tip" data-tip="Source pixels per output pixel. Lower = finer detail / larger canvas. Leave empty to auto-detect from the cutout." aria-label="About Pixel size">i</button>
+                </span>
+                <input id="resnapPx" type="number" min="1" step="1" placeholder="auto" />
+              </label>
+            </div>
+            <div class="actions">
+              <button id="cancelJobBtn" type="button" class="secondary danger-btn" hidden>Cancel</button>
+              <button id="retryFacingBtn" type="button" class="secondary" hidden>Retry facing</button>
+              <button id="retryIncompleteBtn" type="button" class="secondary" hidden>Retry incomplete</button>
+              <button id="resnapBtn" type="button">Resnap</button>
+              <button id="editBtn" type="button" class="secondary">Edit</button>
+              <a id="downloadBtn" class="file-btn download-btn" href="#" download hidden>Download</a>
+            </div>
+            <p id="metaLine" class="meta"></p>
+          </div>
         </section>
       </main>
     </div>
@@ -309,6 +381,11 @@
         <input id="settingsRemoveBgKey" type="password" autocomplete="off" placeholder="optional" />
       </label>
       <p id="settingsRemoveBgHint" class="meta"></p>
+      <label>
+        Parallel jobs
+        <input id="settingsMaxParallelJobs" type="number" min="1" max="16" step="1" value="4" />
+      </label>
+      <p class="meta">How many generations can run at once. Extra jobs stay queued. Default 4 (1–16).</p>
       <div class="actions">
         <button type="button" id="saveSettingsBtn">Save</button>
         <button type="button" id="clearOpenaiBtn" class="secondary">Clear OpenAI key</button>
@@ -339,6 +416,6 @@
     </div>
   </div>
 
-  <script type="module" src="/static/app.js?v=dialogs-tips"></script>
+  <script type="module" src="/static/app.js?v=pose-8dir"></script>
 </body>
 </html>

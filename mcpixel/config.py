@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     alpha_harden_threshold: int = 128
     public_base_url: str = "http://127.0.0.1:8787"
     remove_bg_api_key: str | None = None
+    max_parallel_jobs: int = 4
     default_prompt_suffix: str = (
         "True pixel art sprite, limited color palette, flat colors, "
         "crisp pixels, no anti-aliasing, no blur, solid simple background, "

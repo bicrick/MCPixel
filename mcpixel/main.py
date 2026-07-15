@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +20,7 @@ class NoCacheStaticFiles(StaticFiles):
 
 from mcpixel.api.routes import router
 from mcpixel.config import get_settings
+from mcpixel.jobs.pool import JobPool
 from mcpixel.jobs.runner import JobRunner, build_registry
 from mcpixel.jobs.store import JobStore
 from mcpixel.projects import ProjectStore
@@ -36,12 +38,35 @@ def create_app() -> FastAPI:
     store = JobStore(settings)
     projects = ProjectStore(settings)
     runner = JobRunner(settings, store, build_registry())
+    job_pool = JobPool(settings.data_dir, max_workers=settings.max_parallel_jobs)
 
-    app = FastAPI(title="MCPixel", version="0.1.0")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        from mcpixel.jobs.models import ACTIVE_JOB_STATUSES, JobStatus
+
+        stale = 0
+        for job in store.list_jobs(limit=10_000):
+            if job.status not in ACTIVE_JOB_STATUSES:
+                continue
+            store.set_status(
+                job,
+                JobStatus.failed,
+                error="Interrupted by server restart",
+                stage_error=job.status.value,
+            )
+            stale += 1
+        if stale:
+            logger.warning("Marked %s leftover active job(s) as failed on startup", stale)
+        yield
+        pool: JobPool = app.state.job_pool
+        pool.shutdown(wait=False)
+
+    app = FastAPI(title="MCPixel", version="0.1.0", lifespan=lifespan)
     app.state.settings = settings
     app.state.store = store
     app.state.projects = projects
     app.state.runner = runner
+    app.state.job_pool = job_pool
     app.include_router(router)
 
     if STATIC_DIR.exists():

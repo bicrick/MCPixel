@@ -1,4 +1,6 @@
 import { escapeHtml } from "./api.js";
+import { isDirectionBatch } from "./batch.js";
+import { hideDirectionsView, renderDirectionsView, stepStates } from "./directions-view.js";
 import {
   $,
   PIPELINE_STEPS,
@@ -22,9 +24,12 @@ function syncLibraryBack() {
 
 export function clearSelection(handlers) {
   state.currentJobId = null;
+  state.currentBatchId = null;
+  state.selectedDirection = null;
   state.paintedJobId = null;
   state.lastJobFp = null;
   state.libraryReturn = false;
+  hideDirectionsView();
   setMainMode("empty");
   const bar = $("jobProgress");
   if (bar) bar.hidden = true;
@@ -35,9 +40,12 @@ export function clearSelection(handlers) {
 
 export function showCreate(handlers) {
   state.currentJobId = null;
+  state.currentBatchId = null;
+  state.selectedDirection = null;
   state.paintedJobId = null;
   state.lastJobFp = null;
   state.libraryReturn = false;
+  hideDirectionsView();
   setMainMode("create");
   history.replaceState(null, "", "/");
   const bar = $("jobProgress");
@@ -54,6 +62,21 @@ export function showCreate(handlers) {
  */
 export function renderJob(job, handlers, opts = {}) {
   upsertJob(job);
+
+  if (isDirectionBatch(job)) {
+    const switching =
+      Boolean(opts.force) || state.paintedJobId !== `batch:${job.extra.direction_batch_id}`;
+    setMainMode("job");
+    syncLibraryBack();
+    renderDirectionsView(job, handlers, opts);
+    renderQueue(handlers, { force: switching });
+    renderLibrary(handlers, { force: switching });
+    if (switching) renderLibraryFilters(handlers, { force: true });
+    return;
+  }
+
+  hideDirectionsView();
+
   const fp = jobFingerprint(job);
   const switching = state.paintedJobId !== job.id;
   const force = Boolean(opts.force) || switching;
@@ -63,6 +86,8 @@ export function renderJob(job, handlers, opts = {}) {
   }
 
   state.currentJobId = job.id;
+  state.currentBatchId = null;
+  state.selectedDirection = null;
   setMainMode("job");
   syncLibraryBack();
 
@@ -86,32 +111,6 @@ export function renderJob(job, handlers, opts = {}) {
   renderQueue(handlers, { force: switching });
   renderLibrary(handlers, { force: switching });
   if (switching) renderLibraryFilters(handlers, { force: true });
-}
-
-function stepStates(job) {
-  const status = job.status;
-  if (status === "failed") {
-    const failedAt = job.stage_error || "generating";
-    return PIPELINE_STEPS.map((step) => {
-      if (step.key === "completed") return "todo";
-      const order = PIPELINE_STEPS.findIndex((s) => s.key === step.key);
-      const failOrder = PIPELINE_STEPS.findIndex((s) => s.key === failedAt);
-      if (failOrder < 0) {
-        return step.key === "generating" ? "failed" : order < 1 ? "done" : "todo";
-      }
-      if (order < failOrder) return "done";
-      if (order === failOrder) return "failed";
-      return "todo";
-    });
-  }
-  const currentIdx = PIPELINE_STEPS.findIndex((s) => s.key === status);
-  return PIPELINE_STEPS.map((_step, idx) => {
-    if (status === "completed") return "done";
-    if (currentIdx < 0) return "todo";
-    if (idx < currentIdx) return "done";
-    if (idx === currentIdx) return "current";
-    return "todo";
-  });
 }
 
 function mountStepper(job) {
@@ -246,8 +245,9 @@ function mountHero(job) {
     download.hidden = false;
     download.href = url;
     download.download = `${job.id}_best.png`;
-  } else if (job.status === "failed") {
-    frame.innerHTML = `<p class="meta hero-placeholder">Failed${job.error ? `: ${escapeHtml(job.error)}` : ""}</p>`;
+  } else if (job.status === "failed" || job.status === "cancelled") {
+    const label = job.status === "cancelled" ? "Cancelled" : "Failed";
+    frame.innerHTML = `<p class="meta hero-placeholder">${label}${job.error && job.status === "failed" ? `: ${escapeHtml(job.error)}` : ""}</p>`;
     download.hidden = true;
   } else {
     frame.innerHTML = `<p class="meta hero-placeholder">Waiting for output…</p>`;
@@ -288,7 +288,7 @@ function patchHero(job) {
     mountHero(job);
     return;
   }
-  if (img || job.status === "failed" || !frame.querySelector(".hero-placeholder")) {
+  if (img || job.status === "failed" || job.status === "cancelled" || !frame.querySelector(".hero-placeholder")) {
     mountHero(job);
     return;
   }
@@ -314,8 +314,18 @@ function patchJobChrome(job) {
 
   const urls = job.urls || {};
   const canEdit = Boolean(urls.snapped || urls.cutout);
-  $("editBtn").disabled = !canEdit || isActive(job.status);
-  $("resnapBtn").disabled = !urls.cutout || isActive(job.status);
+  const active = isActive(job.status);
+  $("editBtn").disabled = !canEdit || active;
+  $("resnapBtn").disabled = !urls.cutout || active;
+  const cancelBtn = $("cancelJobBtn");
+  if (cancelBtn) {
+    cancelBtn.hidden = !active;
+    cancelBtn.disabled = !active;
+  }
+  const retryFacing = $("retryFacingBtn");
+  if (retryFacing) retryFacing.hidden = true;
+  const retryIncomplete = $("retryIncompleteBtn");
+  if (retryIncomplete) retryIncomplete.hidden = true;
 }
 
 function syncResnapInputs(job, force) {
