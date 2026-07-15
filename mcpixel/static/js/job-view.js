@@ -1,6 +1,7 @@
 import { escapeHtml } from "./api.js";
 import { isDirectionBatch } from "./batch.js";
 import { hideDirectionsView, renderDirectionsView, stepStates } from "./directions-view.js";
+import { syncCreateChrome, syncCreateNav } from "./generate.js";
 import {
   $,
   PIPELINE_STEPS,
@@ -50,6 +51,8 @@ export function showCreate(handlers) {
   history.replaceState(null, "", "/");
   const bar = $("jobProgress");
   if (bar) bar.hidden = true;
+  syncCreateNav();
+  syncCreateChrome();
   renderQueue(handlers, { force: true });
   renderLibraryFilters(handlers, { force: true });
   renderLibrary(handlers, { force: true });

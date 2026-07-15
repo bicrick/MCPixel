@@ -147,13 +147,41 @@
   border-color: var(--line);
 }
 
+.create-nav {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.create-category-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.create-category-tab {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  padding: 0.45rem 0.85rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.create-category-tab.active {
+  color: var(--cta-ink);
+  background: var(--cta);
+  border-color: var(--cta);
+}
+
 .create-mode-bar {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--line);
 }
 
 .create-mode-tab {
@@ -167,9 +195,9 @@
 }
 
 .create-mode-tab.active {
-  color: var(--cta-ink);
-  background: var(--cta);
-  border-color: var(--cta);
+  color: var(--ink);
+  background: var(--bg2);
+  border-color: var(--accent);
 }
 
 .create-mode-tab:disabled {
@@ -308,10 +336,11 @@
 }
 
 .library-item {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 0.3rem;
+  gap: 0;
   padding: 0.4rem;
   border: 1px solid var(--line);
   background: var(--bg0);
@@ -326,6 +355,32 @@
 .library-item.selected {
   border-color: var(--accent);
   background: color-mix(in srgb, var(--accent) 10%, var(--bg2));
+}
+
+.library-item-select {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  cursor: pointer;
+}
+
+.library-item .menu-btn {
+  position: absolute;
+  top: 0.2rem;
+  right: 0.2rem;
+  margin: 0;
+  z-index: 1;
+  background: color-mix(in srgb, var(--bg0) 85%, transparent);
 }
 
 .library-item img {
@@ -796,6 +851,7 @@
   margin: 0.35rem 0 0;
 }
 
+.aspect-chip,
 .pose-chip {
   background: var(--bg0);
   color: var(--muted);
@@ -804,10 +860,16 @@
   font-size: 0.7rem;
 }
 
+.aspect-chip.active,
 .pose-chip.active {
   color: var(--ink);
   border-color: var(--accent);
   background: var(--bg2);
+}
+
+#bgProviderLabel.is-locked select {
+  opacity: 0.75;
+  cursor: not-allowed;
 }
 
 .facing-row {

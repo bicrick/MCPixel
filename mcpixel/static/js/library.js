@@ -1,4 +1,5 @@
 import { escapeHtml } from "./api.js";
+import { bindJobMenu } from "./queue.js";
 import {
   $,
   bestUrl,
@@ -132,6 +133,7 @@ export function renderLibraryFilters(handlers = {}, opts = {}) {
 /**
  * @param {{
  *   onSelect?: (id: string) => void,
+ *   onOpenMenu?: (id: string, btn: HTMLElement, opts?: object) => void,
  *   onDropJob?: (projectId: string, jobId: string) => void,
  * }} [handlers]
  * @param {{ force?: boolean }} [opts]
@@ -164,41 +166,54 @@ export function renderLibrary(handlers = {}, opts = {}) {
       const caption = escapeHtml(shortCaption(j.prompt || j.id || ""));
       const selected = j.id === state.currentJobId ? " selected" : "";
       return `
-        <button type="button" class="library-item${selected}" data-id="${j.id}" draggable="true" title="${escapeHtml(j.prompt || j.id)}">
-          <img src="${src}?t=${cacheBust(j)}" alt="" draggable="false" />
-          <span class="library-caption">${caption}</span>
-        </button>
+        <div class="library-item${selected}" data-id="${j.id}" draggable="true" title="${escapeHtml(j.prompt || j.id)}">
+          <button type="button" class="library-item-select" data-select="${j.id}">
+            <img src="${src}?t=${cacheBust(j)}" alt="" draggable="false" />
+            <span class="library-caption">${caption}</span>
+          </button>
+          <button type="button" class="menu-btn" data-menu="${j.id}" aria-label="Job actions" aria-expanded="false" aria-haspopup="menu">⋯</button>
+        </div>
       `;
     })
     .join("");
 
-  el.querySelectorAll(".library-item").forEach((btn) => {
+  el.querySelectorAll(".library-item").forEach((card) => {
     let suppressClick = false;
-    btn.addEventListener("dragstart", (e) => {
+    card.addEventListener("dragstart", (e) => {
+      if (e.target.closest(".menu-btn")) {
+        e.preventDefault();
+        return;
+      }
       suppressClick = true;
-      draggingJobId = btn.dataset.id;
-      btn.classList.add("dragging");
-      e.dataTransfer.setData(DRAG_TYPE, btn.dataset.id);
+      draggingJobId = card.dataset.id;
+      card.classList.add("dragging");
+      e.dataTransfer.setData(DRAG_TYPE, card.dataset.id);
       e.dataTransfer.effectAllowed = "copy";
     });
-    btn.addEventListener("dragend", () => {
-      btn.classList.remove("dragging");
+    card.addEventListener("dragend", () => {
+      card.classList.remove("dragging");
       draggingJobId = null;
       clearDropTargets();
       setTimeout(() => {
         suppressClick = false;
       }, 0);
     });
-    btn.addEventListener("click", (e) => {
+    card.querySelector("[data-select]")?.addEventListener("click", (e) => {
       if (suppressClick) {
         e.preventDefault();
         e.stopPropagation();
         return;
       }
-      handlers?.onSelect?.(btn.dataset.id);
+      handlers?.onSelect?.(card.dataset.id);
+    });
+    card.querySelector("[data-menu]")?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const btn = e.currentTarget;
+      handlers?.onOpenMenu?.(btn.dataset.menu, btn, {});
     });
   });
 
+  bindJobMenu(handlers);
   state.lastLibraryFp = fp;
 }
 

@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     openai_image_model: str = "gpt-image-1"
     openai_text_model: str = "gpt-5-nano"
-    rembg_model: str = "birefnet-general"
+    # u2net (~176MB) fits typical Docker heaps; birefnet-general (~1GB) often OOMs.
+    rembg_model: str = "u2net"
     alpha_harden_threshold: int = 128
     public_base_url: str = "http://127.0.0.1:8787"
     remove_bg_api_key: str | None = None

@@ -241,6 +241,8 @@ async def generate_with_reference(
     bg = BgProvider(str(form.get("bg_provider") or BgProvider.rembg_birefnet.value))
     tw = form.get("target_width")
     th = form.get("target_height")
+    size_raw = str(form.get("image_size") or "1024x1024").strip()
+    kind_raw = str(form.get("kind") or "sprite").strip().lower()
     try:
         body = GenerateRequest(
             prompt=prompt_text,
@@ -250,6 +252,8 @@ async def generate_with_reference(
             wrap_prompt=wrap,
             target_width=int(str(tw)) if tw not in (None, "") else None,
             target_height=int(str(th)) if th not in (None, "") else None,
+            image_size=size_raw,
+            kind=kind_raw,
         )
     except Exception as exc:
         raise HTTPException(400, str(exc)) from exc

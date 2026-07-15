@@ -26,6 +26,11 @@ export const STATUS_LABELS = {
 
 export const SIZE_PRESETS = [16, 32, 48, 64];
 export const K_PRESETS = [2, 4, 8, 16, 32, 64];
+export const ASPECT_TO_SIZE = {
+  "1:1": "1024x1024",
+  "16:9": "1536x1024",
+  "9:16": "1024x1536",
+};
 
 /** Discrete stage weights — no streaming % from providers. */
 export const PROGRESS_BY_STATUS = {
@@ -50,15 +55,20 @@ export const state = {
   jobsById: new Map(),
   projects: [],
   activeProjectId: null, // null = list; "unfiled" | project id when drilled in
-  queueFilter: "all",
+  queueFilter: "queued",
   pollTimer: null,
   toastTimer: null,
   targetMode: "64",
   targetWidth: 64,
   targetHeight: 64,
+  createCategory: "sprite", // sprite | texture
+  createMode: "sprite", // sprite | rotations | animation | background
   poseMode: "none", // none | topdown8
+  aspectRatio: "16:9", // 1:1 | 16:9 | 9:16
+  imageSize: "1536x1024",
   referenceFacing: null, // N|NE|... required before Generate 8
   kMode: "16", // "none" | "2"|"4"|...
+  spriteBgProvider: "rembg_birefnet",
   referenceFile: null,
   referenceJobId: null,
   referenceObjectUrl: null,
@@ -124,12 +134,16 @@ export function bestUrl(job) {
 }
 
 export function matchesFilter(job) {
-  if (state.queueFilter === "all") return true;
-  if (state.queueFilter === "active") return isActive(job.status);
+  // "queued" = in-flight (queued + generating + cutout + snapping).
+  // Legacy "active" / "all" keys still resolve for safety.
+  if (state.queueFilter === "queued" || state.queueFilter === "active") {
+    return isActive(job.status);
+  }
   if (state.queueFilter === "done") return job.status === "completed";
   if (state.queueFilter === "failed") {
     return job.status === "failed" || job.status === "cancelled";
   }
+  if (state.queueFilter === "all") return true;
   return true;
 }
 

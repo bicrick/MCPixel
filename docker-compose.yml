@@ -15,10 +15,11 @@ services:
     volumes:
       - ./data:/app/data
       - ./mcpixel:/app/mcpixel
+      # Persist ONNX weights across restarts (rembg downloads into ~/.u2net).
       - rembg-models:/root/.u2net
-    # rembg/BiRefNet needs a large heap; match Docker Desktop Resources (>=12GB recommended).
-    mem_limit: 12g
-    memswap_limit: 16g
+    # Default REMBG_MODEL=u2net is fine on ~4GB+. BiRefNet needs much more (>=12GB).
+    mem_limit: 8g
+    memswap_limit: 12g
     shm_size: 1g
     # --reload picks up Python changes; static HTML/CSS/JS are read from disk each request.
     command:

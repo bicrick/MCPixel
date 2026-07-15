@@ -6,9 +6,11 @@ from pathlib import Path
 from mcpixel.config import Settings
 from mcpixel.jobs.models import (
     ACTIVE_JOB_STATUSES,
+    AssetKind,
     BgProvider,
     DirectionsRequest,
     GenerateRequest,
+    ImageSize,
     JobRecord,
     JobStatus,
     PoseMode,
@@ -47,9 +49,23 @@ class JobRunner:
         wrap: bool,
         target_width: int | None = None,
         target_height: int | None = None,
+        kind: AssetKind = AssetKind.sprite,
+        image_size: ImageSize = ImageSize.square,
     ) -> str:
         text = prompt.strip()
-        if target_width and target_height:
+        if kind == AssetKind.background:
+            if image_size == ImageSize.landscape:
+                framing = "Wide landscape framing (16:9)."
+            elif image_size == ImageSize.portrait:
+                framing = "Tall portrait framing (9:16)."
+            else:
+                framing = "Square framing (1:1)."
+            text = (
+                f"{text}\n\nFull-bleed pixel-art environment / background scene. "
+                f"{framing} No single character focus; fill the frame with scenery "
+                "suitable for a game backdrop."
+            )
+        elif target_width and target_height:
             text = (
                 f"{text}\n\nTarget sprite roughly {target_width}x{target_height} pixels, "
                 "single centered subject, clear silhouette, game asset framing."
@@ -68,6 +84,8 @@ class JobRunner:
     ) -> JobRecord:
         job_id = self.store.new_id()
         bg = BgProvider.skip if req.skip_bg_remove else req.bg_provider
+        if req.kind == AssetKind.background:
+            bg = BgProvider.skip
         extra: dict = {}
         if reference_bytes or req.reference_job_id:
             extra["had_reference"] = True
@@ -84,6 +102,8 @@ class JobRunner:
                 req.wrap_prompt,
                 target_width=req.target_width,
                 target_height=req.target_height,
+                kind=req.kind,
+                image_size=req.image_size,
             ),
             provider=req.provider,
             k_colors=req.k_colors,
@@ -91,6 +111,8 @@ class JobRunner:
             bg_provider=bg,
             target_width=req.target_width,
             target_height=req.target_height,
+            image_size=req.image_size,
+            kind=req.kind,
             extra=extra,
         )
         self.store.create(record)
@@ -556,13 +578,18 @@ class JobRunner:
                 return
             provider = self.providers.get(record.provider.value)
             prompt = record.wrapped_prompt or record.prompt
+            size = (
+                record.image_size.value
+                if hasattr(record.image_size, "value")
+                else (record.image_size or "1024x1024")
+            )
             ref_path = self.store.stage_path(job_id, "reference")
             if ref_path.exists():
                 raw_bytes = provider.generate_with_reference(
-                    prompt, ref_path.read_bytes(), self.settings
+                    prompt, ref_path.read_bytes(), self.settings, size=size
                 )
             else:
-                raw_bytes = provider.generate(prompt, self.settings)
+                raw_bytes = provider.generate(prompt, self.settings, size=size)
             if self._is_cancelled(job_id):
                 return
             self.store.write_bytes(job_id, "raw", raw_bytes)

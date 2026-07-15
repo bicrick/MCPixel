@@ -473,6 +473,11 @@ function wireMenu(handlers) {
   };
 }
 
+/** Keep the shared job menu wired (e.g. after Library-only refreshes). */
+export function bindJobMenu(handlers) {
+  wireMenu(handlers);
+}
+
 export async function deleteJob(jobId) {
   await api(`/v1/jobs/${jobId}`, { method: "DELETE" });
   state.jobsById.delete(jobId);

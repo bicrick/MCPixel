@@ -30,7 +30,7 @@
 
     <nav class="mobile-tabs" role="tablist" aria-label="Workspace">
       <button type="button" class="mobile-tab" data-tab="create" role="tab">Create</button>
-      <button type="button" class="mobile-tab active" data-tab="queue" role="tab" aria-selected="true">Queue</button>
+      <button type="button" class="mobile-tab active" data-tab="queue" role="tab" aria-selected="true">Jobs</button>
       <button type="button" class="mobile-tab" data-tab="job" role="tab">Job</button>
     </nav>
 
@@ -41,7 +41,7 @@
         </div>
         <div class="rail-toolbar">
           <div class="rail-tabs" role="tablist" aria-label="Sidebar">
-            <button type="button" class="rail-tab active" data-rail="queue">Queue</button>
+            <button type="button" class="rail-tab active" data-rail="queue">Jobs</button>
             <button type="button" class="rail-tab" data-rail="library">Library</button>
           </div>
         </div>
@@ -53,8 +53,7 @@
               <button type="button" id="clearFailedBtn" class="clear-failed-btn" hidden>Clear failed</button>
             </div>
             <div class="queue-filters" role="group" aria-label="Filter jobs">
-              <button type="button" class="filter-btn active" data-filter="all">All</button>
-              <button type="button" class="filter-btn" data-filter="active">Active</button>
+              <button type="button" class="filter-btn active" data-filter="queued">Queued</button>
               <button type="button" class="filter-btn" data-filter="done">Done</button>
               <button type="button" class="filter-btn" data-filter="failed">Failed</button>
             </div>
@@ -81,7 +80,7 @@
       <main class="workspace" id="workspace">
         <div id="emptyState" class="empty-state">
           <p class="empty-title">No job selected</p>
-          <p class="empty-copy">Open the library, pick something from the queue, or hit + to create a sprite.</p>
+          <p class="empty-copy">Open the library, pick something from jobs, or hit + to create a sprite.</p>
         </div>
 
         <section id="libraryView" class="library-view" hidden>
@@ -93,11 +92,19 @@
         </section>
 
         <section id="createView" class="create-view" hidden>
-          <div class="create-mode-bar" role="tablist" aria-label="Create mode">
-            <button type="button" class="create-mode-tab active" data-create-mode="sprite" role="tab" aria-selected="true">Create sprite</button>
-            <button type="button" class="create-mode-tab" data-create-mode="rotations" role="tab">Create 8 rotations</button>
-            <button type="button" class="create-mode-tab" data-create-mode="animation" role="tab" disabled>Create animation <span class="soon">Coming in v5</span></button>
-            <button type="button" class="create-mode-tab" data-create-mode="rotations-animation" role="tab" disabled>8 rotations + animation <span class="soon">Coming in v5</span></button>
+          <div class="create-nav">
+            <div class="create-category-bar" role="tablist" aria-label="Create category">
+              <button type="button" class="create-category-tab active" data-create-category="sprite" role="tab" aria-selected="true">Sprite</button>
+              <button type="button" class="create-category-tab" data-create-category="texture" role="tab" aria-selected="false">Texture</button>
+            </div>
+            <div class="create-mode-bar" id="spriteModeBar" role="tablist" aria-label="Sprite create mode">
+              <button type="button" class="create-mode-tab active" data-create-mode="sprite" role="tab" aria-selected="true">Create sprite</button>
+              <button type="button" class="create-mode-tab" data-create-mode="rotations" role="tab" aria-selected="false">Create 8 rotations</button>
+              <button type="button" class="create-mode-tab" data-create-mode="animation" role="tab" disabled>Create animation <span class="soon">Coming in v5</span></button>
+            </div>
+            <div class="create-mode-bar" id="textureModeBar" role="tablist" aria-label="Texture create mode" hidden>
+              <button type="button" class="create-mode-tab active" data-create-mode="background" role="tab" aria-selected="true">Create background</button>
+            </div>
           </div>
           <div class="create-view-head">
             <h2 id="createModeTitle">Create sprite</h2>
@@ -149,7 +156,7 @@
               </div>
             </div>
             <div class="create-side-col">
-              <div class="size-row">
+              <div class="size-row" id="targetSizeRow">
                 <span class="field-label">
                   Target size (prompt hint)
                   <button type="button" class="info-tip" data-tip="Hint only — baked into the prompt text. Does not resize the final snap. Cutout and pixel snap still decide output size." aria-label="About Target size">i</button>
@@ -168,16 +175,16 @@
                   <input id="customH" type="number" min="1" max="1024" placeholder="H" />
                 </div>
               </div>
-              <div class="size-row pose-row">
+              <div class="size-row" id="aspectRatioRow" hidden>
                 <span class="field-label">
-                  Pose
-                  <button type="button" class="info-tip" data-tip="None = one sprite. 8 directions = pick a reference and which way it faces; that facing is kept as-is and the other seven are generated with the same pose, rotated." aria-label="About Pose">i</button>
+                  Aspect ratio
+                  <button type="button" class="info-tip" data-tip="Sets the OpenAI image canvas size: 1:1 → 1024×1024, 16:9 → 1536×1024, 9:16 → 1024×1536." aria-label="About Aspect ratio">i</button>
                 </span>
-                <div class="chip-row" id="poseChips">
-                  <button type="button" class="pose-chip active" data-pose="none">None</button>
-                  <button type="button" class="pose-chip" data-pose="topdown8">8 directions</button>
+                <div class="chip-row" id="aspectChips">
+                  <button type="button" class="aspect-chip" data-aspect="1:1" data-image-size="1024x1024">1:1</button>
+                  <button type="button" class="aspect-chip active" data-aspect="16:9" data-image-size="1536x1024">16:9</button>
+                  <button type="button" class="aspect-chip" data-aspect="9:16" data-image-size="1024x1536">9:16</button>
                 </div>
-                <p class="meta pose-hint" id="poseHint" hidden>Needs a reference (library or file), longest side ≤ 1024px. Pick which way the reference already faces.</p>
               </div>
               <div class="size-row facing-row" id="facingRow" hidden>
                 <span class="field-label">
@@ -252,13 +259,13 @@
                     </span>
                     <input id="pixelSize" type="number" min="1" step="1" placeholder="auto" />
                   </label>
-                  <label>
+                  <label id="bgProviderLabel">
                     <span class="field-label">
                       Background
-                      <button type="button" class="info-tip" data-tip="How to cut the subject from the background before snap. rembg+BiRefNet is local; remove.bg needs an API key; Skip keeps the raw plate." aria-label="About Background">i</button>
+                      <button type="button" class="info-tip" id="bgProviderTip" data-tip="How to cut the subject from the background before snap. rembg is local (model via REMBG_MODEL, default u2net); remove.bg needs an API key; Skip keeps the raw plate." aria-label="About Background">i</button>
                     </span>
                     <select id="bgProvider">
-                      <option value="rembg_birefnet">rembg + BiRefNet</option>
+                      <option value="rembg_birefnet">rembg (local)</option>
                       <option value="skip">Skip</option>
                       <option value="remove_bg">remove.bg API</option>
                     </select>

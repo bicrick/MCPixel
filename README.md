@@ -7,7 +7,7 @@ Local pixel art suite: **generate → remove background → snap to grid → twe
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688.svg?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![OpenAI](https://img.shields.io/badge/OpenAI-Images-412991.svg?logo=openai&logoColor=white)](https://platform.openai.com/)
-[![rembg](https://img.shields.io/badge/rembg-BiRefNet-0f172a.svg)](https://github.com/danielgatis/rembg)
+[![rembg](https://img.shields.io/badge/rembg-u2net-0f172a.svg)](https://github.com/danielgatis/rembg)
 
 Turn a text prompt (or your own PNG) into clean, grid-aligned pixel art in the browser. Everything runs on your machine via Docker. You bring your own API keys (BYOK) when you want AI generation.
 
@@ -29,7 +29,7 @@ Your assets and keys stay on your computer. No account with MCPixel itself — j
 ## Features
 
 - **Prompt or upload** — generate with OpenAI Images, or skip generation and upload a PNG
-- **Background removal** — rembg (BiRefNet by default) with optional alpha hardening
+- **Background removal** — rembg (u2net by default; BiRefNet optional) with optional alpha hardening
 - **Pixel snap** — [Pixel Snapper](https://github.com/Hugo-Dz/spritefusion-pixel-snapper) baked into the Docker image
 - **Resnap** — reuse a cutout and re-run snap without a new generation cost
 - **Skip cutout** — if the image is already transparent, jump straight to snap
@@ -108,7 +108,7 @@ Most people only need the OpenAI key. These are the knobs that matter day to day
 | --- | --- |
 | `OPENAI_API_KEY` | Enables text-to-image generation. Empty = upload-only mode. |
 | `OPENAI_IMAGE_MODEL` | Image model name (default: `gpt-image-1`). |
-| `REMBG_MODEL` | Background model: `birefnet-general` (default), `u2net`, or `isnet-general-use`. |
+| `REMBG_MODEL` | Background model: `u2net` (default), `isnet-general-use`, or `birefnet-general` (needs ~12GB+ RAM). |
 | `ALPHA_HARDEN_THRESHOLD` | Makes cutout edges more hard-edged (default: `128`). |
 
 The UI listens on port **8787** (see `docker-compose.yml` if you need to change the published port). Other variables in `.env.example` are for advanced setups; Docker Compose already sets the Snapper binary and data directory for you.

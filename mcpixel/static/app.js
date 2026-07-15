@@ -47,6 +47,7 @@ import {
 import {
   bindCreateDrop,
   bindCreateMenu,
+  bindAspectChips,
   bindKChips,
   bindPoseChips,
   bindReferenceControls,
@@ -138,7 +139,7 @@ function updateActiveBadge() {
     ["queued", "generating", "removing_background", "snapping"].includes(j.status)
   ).length;
   const tab = document.querySelector('.mobile-tab[data-tab="queue"]');
-  if (tab) tab.textContent = n ? `Queue (${n})` : "Queue";
+  if (tab) tab.textContent = n ? `Jobs (${n})` : "Jobs";
 }
 
 function masterIdForJob(job) {
@@ -293,7 +294,7 @@ async function handleMenuAction(action, jobId, projectId) {
     if (action === "delete-project" && projectId) {
       const current = state.projects.find((p) => p.id === projectId);
       const ok = await confirmDialog(
-        `Delete project “${current?.name || projectId}”? Jobs stay in the queue.`,
+        `Delete project “${current?.name || projectId}”? Jobs stay in the list.`,
         { title: "Delete project", confirmLabel: "Delete", danger: true }
       );
       if (!ok) return;
@@ -542,6 +543,7 @@ function openLibraryWorkspace() {
 
 function bindUi() {
   bindSizeChips();
+  bindAspectChips();
   bindPoseChips();
   bindKChips();
   bindEditorEvents();

@@ -8,6 +8,15 @@ from openai import OpenAI
 from mcpixel.config import Settings
 from mcpixel.providers.base import ImageProvider
 
+_ALLOWED_SIZES = frozenset({"1024x1024", "1536x1024", "1024x1536"})
+
+
+def _normalize_size(size: str | None) -> str:
+    value = (size or "1024x1024").strip()
+    if value not in _ALLOWED_SIZES:
+        return "1024x1024"
+    return value
+
 
 def _png_from_response(item) -> bytes:
     if getattr(item, "b64_json", None):
@@ -31,18 +40,25 @@ class OpenAIImageProvider(ImageProvider):
             )
         return OpenAI(api_key=settings.openai_api_key)
 
-    def generate(self, prompt: str, settings: Settings) -> bytes:
+    def generate(
+        self, prompt: str, settings: Settings, *, size: str = "1024x1024"
+    ) -> bytes:
         client = self._client(settings)
         response = client.images.generate(
             model=settings.openai_image_model,
             prompt=prompt,
-            size="1024x1024",
+            size=_normalize_size(size),
             n=1,
         )
         return _png_from_response(response.data[0])
 
     def generate_with_reference(
-        self, prompt: str, image_bytes: bytes, settings: Settings
+        self,
+        prompt: str,
+        image_bytes: bytes,
+        settings: Settings,
+        *,
+        size: str = "1024x1024",
     ) -> bytes:
         """Image-to-image via Images Edit — reference guides identity/style."""
         client = self._client(settings)
@@ -52,6 +68,7 @@ class OpenAIImageProvider(ImageProvider):
             "model": settings.openai_image_model,
             "image": buf,
             "prompt": prompt,
+            "size": _normalize_size(size),
         }
         # gpt-image-1.x supports input_fidelity; gpt-image-2 does not.
         model = (settings.openai_image_model or "").lower()

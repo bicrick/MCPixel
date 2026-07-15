@@ -9,11 +9,18 @@ class ImageProvider(ABC):
     name: str
 
     @abstractmethod
-    def generate(self, prompt: str, settings: Settings) -> bytes:
+    def generate(
+        self, prompt: str, settings: Settings, *, size: str = "1024x1024"
+    ) -> bytes:
         """Return PNG bytes for the given prompt."""
 
     def generate_with_reference(
-        self, prompt: str, image_bytes: bytes, settings: Settings
+        self,
+        prompt: str,
+        image_bytes: bytes,
+        settings: Settings,
+        *,
+        size: str = "1024x1024",
     ) -> bytes:
         raise NotImplementedError(
             f"Provider {self.name} does not support reference images"

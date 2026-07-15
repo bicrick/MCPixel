@@ -37,6 +37,17 @@ class ImageProviderName(str, Enum):
     openai = "openai"
 
 
+class ImageSize(str, Enum):
+    square = "1024x1024"
+    landscape = "1536x1024"
+    portrait = "1024x1536"
+
+
+class AssetKind(str, Enum):
+    sprite = "sprite"
+    background = "background"
+
+
 class GenerateRequest(BaseModel):
     prompt: str = Field(min_length=1)
     provider: ImageProviderName = ImageProviderName.openai
@@ -47,6 +58,8 @@ class GenerateRequest(BaseModel):
     skip_bg_remove: bool = False
     target_width: int | None = Field(default=None, ge=1, le=1024)
     target_height: int | None = Field(default=None, ge=1, le=1024)
+    image_size: ImageSize = ImageSize.square
+    kind: AssetKind = AssetKind.sprite
     reference_job_id: str | None = None
     reference_stage: str | None = None
 
@@ -60,6 +73,8 @@ class GenerateRequest(BaseModel):
             "raw",
         }:
             raise ValueError("invalid reference_stage")
+        if self.kind == AssetKind.background:
+            self.bg_provider = BgProvider.skip
 
 
 class PoseMode(str, Enum):
@@ -120,6 +135,8 @@ class JobRecord(BaseModel):
     bg_provider: BgProvider = BgProvider.rembg_birefnet
     target_width: int | None = None
     target_height: int | None = None
+    image_size: ImageSize = ImageSize.square
+    kind: AssetKind = AssetKind.sprite
     error: str | None = None
     stage_error: str | None = None
     detected_pixel_size: float | None = None

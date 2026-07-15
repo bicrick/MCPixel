@@ -25,7 +25,7 @@ ENV PORT=8787
 ENV PUBLIC_BASE_URL=http://127.0.0.1:8787
 ENV SNAPPER_BIN=/usr/local/bin/spritefusion-pixel-snapper
 ENV DATA_DIR=/app/data
-ENV REMBG_MODEL=birefnet-general
+ENV REMBG_MODEL=u2net
 
 EXPOSE 8787
 VOLUME ["/app/data"]
