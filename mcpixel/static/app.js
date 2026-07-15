@@ -37,7 +37,11 @@ import {
   renderLibraryFilters,
   showLibraryExplorer,
 } from "./js/library.js";
-import { clearSelection, renderJob, showCreate } from "./js/job-view.js";
+import { clearSelection, renderJob, selectJobStage, showCreate } from "./js/job-view.js";
+import {
+  bindPreviewChrome,
+  openResnapModal,
+} from "./js/preview-chrome.js";
 import {
   bindEditorEvents,
   closeEditor,
@@ -70,7 +74,7 @@ import {
   removeJobFromProject,
   renameProject,
 } from "./js/projects.js";
-import { bindSettings, closePrompts, closeSettings } from "./js/settings.js";
+import { bindSettings, closePrompts, openSettings } from "./js/settings.js";
 import { bindInfoTips } from "./js/tooltips.js";
 import { confirmDialog, promptDialog } from "./js/dialogs.js";
 
@@ -378,7 +382,7 @@ async function handleMenuAction(action, jobId, projectId) {
     }
     if (action === "resnap") {
       await selectJob(jobId, { fromLibrary: state.libraryReturn });
-      $("resnapK")?.focus();
+      openResnapModal();
       return;
     }
     if (action === "copy") {
@@ -578,7 +582,9 @@ function bindUi() {
         showLibraryExplorer(libraryHandlers);
       } else {
         renderQueue(queueHandlers);
-        if (state.mainMode === "library") setMainMode("empty");
+        if (state.mainMode === "library" || state.mainMode === "settings") {
+          setMainMode("empty");
+        }
       }
     });
   });
@@ -588,7 +594,10 @@ function bindUi() {
       .then((job) => job && afterNewJob(job))
       .catch((e) => toast(e.message))
   );
-  $("resnapBtn").addEventListener("click", () => resnap());
+  bindPreviewChrome({
+    onResnapConfirm: () => resnap(),
+    onStageSelect: (name) => selectJobStage(name),
+  });
   $("retryFacingBtn")?.addEventListener("click", () => {
     if (!state.currentJobId) return;
     retryJobInPlace(state.currentJobId)
@@ -634,7 +643,7 @@ function bindUi() {
       })
       .catch((e) => toast(e.message));
   });
-  $("editBtn").addEventListener("click", () =>
+  $("editBtn")?.addEventListener("click", () =>
     openEditor((job) => renderJob(job, queueHandlers)).catch((e) => toast(e.message))
   );
   $("saveEditBtn").addEventListener("click", () =>
@@ -662,9 +671,13 @@ function bindUi() {
       const tab = btn.dataset.tab;
       setMobileTab(tab);
       if (tab === "create") openCreateWorkspace();
-      else if (tab === "queue") setRailTab("queue");
-      else if (tab === "job" && state.currentJobId) {
+      else if (tab === "queue") {
+        setRailTab("queue");
+        if (state.mainMode === "settings") setMainMode("empty");
+      } else if (tab === "job" && state.currentJobId) {
         selectJob(state.currentJobId, { mobileSwitch: false, fromLibrary: state.libraryReturn });
+      } else if (tab === "settings") {
+        openSettings().catch((e) => toast(e.message));
       }
     });
   });
@@ -679,8 +692,6 @@ function bindUi() {
       closeChooseRefMenu();
       if ($("promptsOverlay") && !$("promptsOverlay").hidden) {
         closePrompts();
-      } else {
-        closeSettings();
       }
       closeRefPicker();
       if (!$("editorOverlay").hidden) closeEditor();
@@ -716,6 +727,7 @@ Promise.all([refreshQueue(), loadProjects()])
     const params = new URLSearchParams(location.search);
     const jobParam = params.get("job");
     if (jobParam) return selectJob(jobParam, { mobileSwitch: true, fromLibrary: false });
+    if (params.get("settings")) return openSettings();
     if (!state.jobsById.size) clearSelection(queueHandlers);
     else {
       renderQueue(queueHandlers);

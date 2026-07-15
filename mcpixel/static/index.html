@@ -4,6 +4,11 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MCPixel</title>
+  <link rel="icon" href="/static/favicon.ico" sizes="any" />
+  <link rel="icon" type="image/png" href="/static/favicon-64.png" sizes="64x64" />
+  <link rel="icon" type="image/png" href="/static/favicon-48.png" sizes="48x48" />
+  <link rel="icon" type="image/png" href="/static/favicon-32.png" sizes="32x32" />
+  <link rel="icon" type="image/png" href="/static/favicon-16.png" sizes="16x16" />
   <link rel="stylesheet" href="/static/css/tokens.css" />
   <link rel="stylesheet" href="/static/css/base.css" />
   <link rel="stylesheet" href="/static/css/components.css" />
@@ -32,6 +37,7 @@
       <button type="button" class="mobile-tab" data-tab="create" role="tab">Create</button>
       <button type="button" class="mobile-tab active" data-tab="queue" role="tab" aria-selected="true">Jobs</button>
       <button type="button" class="mobile-tab" data-tab="job" role="tab">Job</button>
+      <button type="button" class="mobile-tab" data-tab="settings" role="tab">Settings</button>
     </nav>
 
     <div class="shell">
@@ -311,8 +317,30 @@
             <ol class="stepper" id="stepper" aria-label="Pipeline progress"></ol>
 
             <div class="hero-preview">
-              <div class="hero-frame" id="heroFrame">
-                <p class="meta hero-placeholder">Waiting for output…</p>
+              <div class="hero-frame-wrap">
+                <div class="hero-frame" id="heroFrame">
+                  <p class="meta hero-placeholder">Waiting for output…</p>
+                </div>
+                <div class="hero-chrome" id="heroChrome" hidden>
+                  <button type="button" id="editBtn" class="hero-chrome-btn secondary">Edit</button>
+                  <a id="downloadBtn" class="hero-chrome-btn file-btn download-btn" href="#" download hidden>Download</a>
+                  <button
+                    type="button"
+                    id="expandHeroBtn"
+                    class="hero-chrome-btn hero-expand-btn"
+                    aria-label="View fullscreen"
+                    hidden
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">
+                      <path
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                        d="M1 4.5V1h3.5M9.5 1H13v3.5M13 9.5V13H9.5M4.5 13H1V9.5"
+                      />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -322,39 +350,74 @@
           <div id="batchJobLayout" class="batch-job-layout" hidden>
             <div id="directionsGrid" class="directions-grid" role="group" aria-label="Directions"></div>
             <div class="batch-detail">
-              <div class="hero-frame batch-hero-frame" id="batchHeroFrame">
-                <p class="meta hero-placeholder">Select a direction</p>
+              <div class="hero-frame-wrap">
+                <div class="hero-frame batch-hero-frame" id="batchHeroFrame">
+                  <p class="meta hero-placeholder">Select a direction</p>
+                </div>
               </div>
               <div class="stage-strip" id="batchStages"></div>
             </div>
           </div>
 
-          <div class="hero-actions job-actions">
-            <div class="row resnap-row">
-              <label>
-                <span class="field-label">
-                  Resnap k
-                  <button type="button" class="info-tip" data-tip="Palette size after snap (2–64). Lower = fewer colors." aria-label="About Resnap k">i</button>
-                </span>
-                <input id="resnapK" type="number" min="2" max="64" value="16" />
-              </label>
-              <label>
-                <span class="field-label">
-                  Pixel size
-                  <button type="button" class="info-tip" data-tip="Source pixels per output pixel. Lower = finer detail / larger canvas. Leave empty to auto-detect from the cutout." aria-label="About Pixel size">i</button>
-                </span>
-                <input id="resnapPx" type="number" min="1" step="1" placeholder="auto" />
-              </label>
+          <div class="job-actions">
+            <div class="job-footer">
+              <p id="metaLine" class="meta"></p>
+              <div class="job-footer-actions">
+                <button id="cancelJobBtn" type="button" class="secondary danger-btn" hidden>Cancel</button>
+                <button id="retryFacingBtn" type="button" class="secondary" hidden>Retry facing</button>
+                <button id="retryIncompleteBtn" type="button" class="secondary" hidden>Retry incomplete</button>
+                <button id="resnapBtn" type="button">Resnap</button>
+              </div>
             </div>
-            <div class="actions">
-              <button id="cancelJobBtn" type="button" class="secondary danger-btn" hidden>Cancel</button>
-              <button id="retryFacingBtn" type="button" class="secondary" hidden>Retry facing</button>
-              <button id="retryIncompleteBtn" type="button" class="secondary" hidden>Retry incomplete</button>
-              <button id="resnapBtn" type="button">Resnap</button>
-              <button id="editBtn" type="button" class="secondary">Edit</button>
-              <a id="downloadBtn" class="file-btn download-btn" href="#" download hidden>Download</a>
-            </div>
-            <p id="metaLine" class="meta"></p>
+          </div>
+        </section>
+
+        <section id="settingsView" class="settings-view" hidden>
+          <div class="settings-view-head">
+            <h2 id="settingsTitle">Settings</h2>
+            <p class="meta settings-note">Keys save to <code>data/settings.json</code> on this machine. Job files live in <code>data/jobs/</code>.</p>
+          </div>
+
+          <div class="settings-sections">
+            <section class="settings-card" aria-labelledby="settingsKeysTitle">
+              <h3 id="settingsKeysTitle" class="settings-card-title">API keys</h3>
+              <label>
+                OpenAI API key
+                <input id="settingsOpenaiKey" type="password" autocomplete="off" placeholder="sk-…" />
+              </label>
+              <p id="settingsOpenaiHint" class="meta"></p>
+              <label>
+                remove.bg API key (optional)
+                <input id="settingsRemoveBgKey" type="password" autocomplete="off" placeholder="optional" />
+              </label>
+              <p id="settingsRemoveBgHint" class="meta"></p>
+            </section>
+
+            <section class="settings-card" aria-labelledby="settingsProcessingTitle">
+              <h3 id="settingsProcessingTitle" class="settings-card-title">Processing</h3>
+              <label>
+                Parallel jobs
+                <input id="settingsMaxParallelJobs" type="number" min="1" max="16" step="1" value="4" />
+              </label>
+              <p class="meta">How many generations can run at once. Extra jobs stay queued. Default 4 (1–16).</p>
+            </section>
+
+            <section class="settings-card" aria-labelledby="settingsPromptsTitle">
+              <h3 id="settingsPromptsTitle" class="settings-card-title">Prompts</h3>
+              <div class="settings-prompts-row">
+                <button type="button" id="editPromptsBtn" class="secondary">Edit prompts…</button>
+                <p class="meta">Tune refine, wrap, framing, and 8-direction pose-lock text.</p>
+              </div>
+            </section>
+
+            <section class="settings-card settings-actions-card" aria-label="Settings actions">
+              <div class="settings-actions">
+                <button type="button" id="saveSettingsBtn">Save</button>
+                <button type="button" id="clearOpenaiBtn" class="secondary">Clear OpenAI key</button>
+                <button type="button" id="factoryResetBtn" class="danger-btn">Factory reset settings</button>
+              </div>
+              <p id="settingsStatus" class="status" aria-live="polite"></p>
+            </section>
           </div>
         </section>
       </main>
@@ -368,41 +431,6 @@
         <button type="button" id="closeRefPickerBtn" class="secondary">Cancel</button>
       </div>
       <div id="refPickerList" class="library-grid ref-picker-grid"></div>
-    </div>
-  </div>
-
-  <div id="settingsOverlay" class="settings-overlay" hidden>
-    <div class="settings-drawer" role="dialog" aria-modal="true" aria-labelledby="settingsTitle">
-      <div class="editor-head">
-        <h2 id="settingsTitle">Settings</h2>
-        <button type="button" id="closeSettingsBtn" class="secondary">Done</button>
-      </div>
-      <p class="meta settings-note">Keys save to <code>data/settings.json</code> on this machine. Job files live in <code>data/jobs/</code>.</p>
-      <label>
-        OpenAI API key
-        <input id="settingsOpenaiKey" type="password" autocomplete="off" placeholder="sk-…" />
-      </label>
-      <p id="settingsOpenaiHint" class="meta"></p>
-      <label>
-        remove.bg API key (optional)
-        <input id="settingsRemoveBgKey" type="password" autocomplete="off" placeholder="optional" />
-      </label>
-      <p id="settingsRemoveBgHint" class="meta"></p>
-      <label>
-        Parallel jobs
-        <input id="settingsMaxParallelJobs" type="number" min="1" max="16" step="1" value="4" />
-      </label>
-      <p class="meta">How many generations can run at once. Extra jobs stay queued. Default 4 (1–16).</p>
-      <div class="settings-prompts-row">
-        <button type="button" id="editPromptsBtn" class="secondary">Edit prompts…</button>
-        <p class="meta">Tune refine, wrap, framing, and 8-direction pose-lock text.</p>
-      </div>
-      <div class="actions">
-        <button type="button" id="saveSettingsBtn">Save</button>
-        <button type="button" id="clearOpenaiBtn" class="secondary">Clear OpenAI key</button>
-        <button type="button" id="factoryResetBtn" class="danger-btn">Factory reset settings</button>
-      </div>
-      <p id="settingsStatus" class="status" aria-live="polite"></p>
     </div>
   </div>
 
@@ -422,28 +450,64 @@
     </div>
   </div>
 
+  <div id="resnapOverlay" class="app-dialog-overlay" hidden>
+    <div class="app-dialog resnap-dialog" role="dialog" aria-modal="true" aria-labelledby="resnapTitle">
+      <h2 id="resnapTitle" class="app-dialog-title">Resnap</h2>
+      <p class="app-dialog-message">Re-quantize the cutout with a new palette size and/or pixel size.</p>
+      <div class="resnap-fields">
+        <label>
+          <span class="field-label">
+            Resnap k
+            <button type="button" class="info-tip" data-tip="Palette size after snap (2–64). Lower = fewer colors." aria-label="About Resnap k">i</button>
+          </span>
+          <input id="resnapK" type="number" min="2" max="64" value="16" />
+        </label>
+        <label>
+          <span class="field-label">
+            Pixel size
+            <button type="button" class="info-tip" data-tip="Source pixels per output pixel. Lower = finer detail / larger canvas. Leave empty to auto-detect from the cutout." aria-label="About Pixel size">i</button>
+          </span>
+          <input id="resnapPx" type="number" min="1" step="1" placeholder="auto" />
+        </label>
+      </div>
+      <div class="app-dialog-actions">
+        <button type="button" id="resnapCancelBtn" class="secondary">Cancel</button>
+        <button type="button" id="resnapConfirmBtn">Resnap</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="lightboxOverlay" class="lightbox-overlay" hidden>
+    <button type="button" id="lightboxCloseBtn" class="lightbox-close secondary" aria-label="Close fullscreen">Close</button>
+    <div class="lightbox-stage" id="lightboxStage">
+      <img id="lightboxImg" alt="Fullscreen preview" />
+    </div>
+  </div>
+
   <div id="editorOverlay" class="editor-overlay" hidden>
     <div class="editor-drawer" role="dialog" aria-modal="true" aria-labelledby="editorTitle">
-      <div class="editor-head">
-        <h2 id="editorTitle">Pixel edit</h2>
-        <button type="button" id="closeEditorBtn" class="secondary">Done</button>
+      <div class="editor-chrome">
+        <div class="editor-head">
+          <h2 id="editorTitle">Pixel edit</h2>
+          <button type="button" id="closeEditorBtn" class="secondary">Done</button>
+        </div>
+        <div class="editor-tools">
+          <button type="button" data-tool="pencil" class="tool active">Pencil</button>
+          <button type="button" data-tool="eraser" class="tool">Eraser</button>
+          <button type="button" data-tool="eyedropper" class="tool">Eyedropper</button>
+          <button type="button" id="undoBtn" class="secondary">Undo</button>
+          <button type="button" id="redoBtn" class="secondary">Redo</button>
+          <button type="button" id="saveEditBtn">Save edit</button>
+          <input id="color" type="color" value="#e6c35c" aria-label="Paint color" />
+        </div>
+        <div class="palette" id="palette"></div>
       </div>
-      <div class="editor-tools">
-        <button type="button" data-tool="pencil" class="tool active">Pencil</button>
-        <button type="button" data-tool="eraser" class="tool">Eraser</button>
-        <button type="button" data-tool="eyedropper" class="tool">Eyedropper</button>
-        <button type="button" id="undoBtn" class="secondary">Undo</button>
-        <button type="button" id="redoBtn" class="secondary">Redo</button>
-        <button type="button" id="saveEditBtn">Save edit</button>
-        <input id="color" type="color" value="#e6c35c" />
-      </div>
-      <div class="palette" id="palette"></div>
       <div class="canvas-wrap">
         <canvas id="pixelCanvas"></canvas>
       </div>
     </div>
   </div>
 
-  <script type="module" src="/static/app.js?v=pose-8dir"></script>
+  <script type="module" src="/static/app.js?v=settings-page"></script>
 </body>
 </html>

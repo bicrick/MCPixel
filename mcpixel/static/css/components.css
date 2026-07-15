@@ -472,6 +472,12 @@
   font-size: 0.7rem;
 }
 
+.rail-settings-btn.active {
+  border-color: var(--accent);
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg0));
+}
+
 .project-jobs {
   margin-top: 0.55rem;
   border-top: 1px solid var(--line);
@@ -1479,6 +1485,25 @@
   margin-top: 0.85rem;
 }
 
+.job-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.55rem 1rem;
+}
+
+.job-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.job-footer .meta {
+  flex: 1 1 12rem;
+}
+
 @media (max-width: 720px) {
   .directions-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1653,6 +1678,10 @@
   align-items: start;
 }
 
+.hero-frame-wrap {
+  position: relative;
+}
+
 .hero-frame {
   min-height: clamp(240px, 36vh, 420px);
   display: flex;
@@ -1677,8 +1706,59 @@
 
 .hero-placeholder { margin: 0; }
 
-.hero-actions .row { margin-bottom: 0.55rem; }
-.hero-actions .actions { margin-bottom: 0.45rem; }
+.hero-chrome {
+  position: absolute;
+  top: 0.45rem;
+  right: 0.45rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.hero-chrome[hidden] {
+  display: none !important;
+}
+
+.hero-chrome-btn {
+  padding: 0.28rem 0.5rem;
+  font-size: 0.7rem;
+  line-height: 1;
+  background: color-mix(in srgb, var(--bg0) 85%, transparent);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.hero-chrome-btn:hover:not(:disabled) {
+  border-color: var(--accent-2);
+  background: color-mix(in srgb, var(--accent-2) 12%, var(--bg0));
+}
+
+.hero-chrome-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.hero-chrome-btn.secondary {
+  background: color-mix(in srgb, var(--bg0) 85%, transparent);
+}
+
+.hero-expand-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  color: var(--accent-2);
+}
+
+.hero-expand-btn[hidden],
+.hero-chrome .download-btn[hidden] {
+  display: none !important;
+}
 
 .field-label {
   display: inline-flex;
@@ -1803,6 +1883,75 @@
   border-color: var(--danger);
 }
 
+.resnap-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  margin: 0 0 0.75rem;
+}
+
+.resnap-fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.resnap-fields input {
+  width: 100%;
+}
+
+@media (max-width: 420px) {
+  .resnap-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lightbox-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background-color: #1a1a1a;
+  background-image: var(--checker);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+.lightbox-overlay[hidden] {
+  display: none !important;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg0) 88%, transparent);
+}
+
+.lightbox-stage {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+.lightbox-stage img {
+  width: 100%;
+  height: 100%;
+  max-width: calc(100vw - clamp(2rem, 6vw, 4rem));
+  max-height: calc(100dvh - clamp(2rem, 6vw, 4rem));
+  image-rendering: pixelated;
+  object-fit: contain;
+}
+
 .meta {
   font-size: 0.7rem;
   color: var(--muted);
@@ -1820,6 +1969,23 @@
   border: 1px solid var(--line);
   padding: 0.45rem;
   min-width: 0;
+}
+
+.stage.stage-clickable {
+  cursor: pointer;
+}
+
+.stage.stage-clickable:hover:not(.stage-empty-card) {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
+}
+
+.stage.stage-active {
+  border-color: var(--accent-2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-2) 35%, transparent);
+}
+
+.stage:not(.stage-clickable) {
+  cursor: default;
 }
 
 .stage h3 {
@@ -1896,19 +2062,76 @@
   color: var(--accent-2);
 }
 
+.settings-view {
+  width: min(100%, 40rem);
+  max-width: 100%;
+}
+
+.settings-view-head {
+  margin-bottom: 1rem;
+}
+
+.settings-view-head h2 {
+  margin: 0 0 0.25rem;
+  font-size: 1.15rem;
+}
+
+.settings-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.settings-card {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg1) 94%, black);
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.settings-card label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.settings-card input {
+  width: 100%;
+}
+
+.settings-card-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--ink);
+}
+
 .settings-prompts-row {
-  margin: 0.85rem 0 0.5rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--line);
+  margin: 0;
+  padding-top: 0;
+  border-top: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
 }
 
 .settings-prompts-row .meta {
-  margin: 0.35rem 0 0;
+  margin: 0;
 }
 
-.settings-drawer .actions {
+.settings-actions {
+  display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
+}
+
+.settings-actions-card .status {
+  margin: 0.35rem 0 0;
 }
 
 /* Nested prompts modal (above settings) */
@@ -2009,33 +2232,65 @@
 }
 
 .editor-drawer {
-  width: min(720px, 100%);
-  height: 100%;
-  background: color-mix(in srgb, var(--bg1) 96%, black);
-  border-left: 1px solid var(--line);
+  width: 100%;
+  height: 100dvh;
+  background-color: #1a1a1a;
+  background-image: var(--checker);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
   display: flex;
   flex-direction: column;
-  padding: 0.85rem 1rem 1.1rem;
-  box-shadow: -8px 0 0 rgba(0, 0, 0, 0.25);
+  padding: 0;
+  overflow: hidden;
+}
+
+.editor-overlay {
+  z-index: 70;
+  background: #1a1a1a;
+}
+
+.editor-chrome {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  margin: 0.75rem;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg0) 91%, transparent);
+  box-shadow: 4px 4px 0 rgba(0, 0, 0, 0.3);
 }
 
 .editor-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.4rem;
   flex-shrink: 0;
 }
 
-.editor-head h2 { margin: 0; }
+.editor-head h2 {
+  margin: 0;
+  font-size: 0.85rem;
+}
 
 .editor-tools {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0.4rem;
   align-items: center;
   flex-shrink: 0;
+}
+
+.editor-chrome button {
+  padding: 0.35rem 0.55rem;
+  font-size: 0.68rem;
+}
+
+.editor-chrome input[type="color"] {
+  width: 2rem;
+  height: 1.65rem;
+  padding: 0.15rem;
 }
 
 .tool.active {
@@ -2047,7 +2302,7 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0;
   flex-shrink: 0;
 }
 
@@ -2063,19 +2318,19 @@
 .canvas-wrap {
   flex: 1;
   overflow: auto;
-  background: var(--bg0);
-  border: 1px solid var(--line);
-  padding: 0.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(0.75rem, 2vw, 1.5rem);
   min-height: 0;
+  min-width: 0;
 }
 
 #pixelCanvas {
+  flex: 0 0 auto;
   image-rendering: pixelated;
   cursor: crosshair;
-  background-color: #222;
-  background-image: var(--checker);
-  background-size: 12px 12px;
-  background-position: 0 0, 0 6px, 6px -6px, -6px 0;
+  background: transparent;
 }
 
 @media (max-width: 900px) {
@@ -2100,17 +2355,18 @@
 
   .workspace { display: none; }
   .app[data-mobile-tab="create"] .workspace,
-  .app[data-mobile-tab="job"] .workspace {
+  .app[data-mobile-tab="job"] .workspace,
+  .app[data-mobile-tab="settings"] .workspace {
     display: block;
   }
   .app[data-mobile-tab="create"] .rail,
-  .app[data-mobile-tab="job"] .rail {
+  .app[data-mobile-tab="job"] .rail,
+  .app[data-mobile-tab="settings"] .rail {
     display: none;
   }
 
   .hero-preview { grid-template-columns: 1fr; }
   .stage-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .editor-drawer,
-  .settings-drawer { width: 100%; }
+  .editor-drawer { width: 100%; }
   .topbar-tag { display: none; }
 }

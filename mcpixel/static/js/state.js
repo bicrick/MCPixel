@@ -47,7 +47,8 @@ export const state = {
   currentJobId: null,
   currentBatchId: null,
   selectedDirection: null, // N|NE|... when viewing a batch
-  mainMode: "empty", // empty | create | job | library
+  selectedStage: null, // raw|cutout|snapped|edited — drives hero preview
+  mainMode: "empty", // empty | create | job | library | settings
   railTab: "queue", // queue | library
   libraryFilter: "all", // all | unfiled | project id
   libraryReturn: false,
@@ -220,10 +221,12 @@ export function setMainMode(mode) {
   const create = $("createView");
   const inspect = $("inspect");
   const library = $("libraryView");
+  const settings = $("settingsView");
   if (empty) empty.hidden = mode !== "empty";
   if (create) create.hidden = mode !== "create";
   if (inspect) inspect.hidden = mode !== "job";
   if (library) library.hidden = mode !== "library";
+  if (settings) settings.hidden = mode !== "settings";
   const newBtn = $("newBtn");
   if (newBtn) {
     const onCreate = mode === "create";
@@ -232,6 +235,13 @@ export function setMainMode(mode) {
   }
   const backBtn = $("backToLibraryBtn");
   if (backBtn) backBtn.hidden = !(mode === "job" && state.libraryReturn);
+  const settingsBtn = $("settingsBtn");
+  if (settingsBtn) {
+    const onSettings = mode === "settings";
+    settingsBtn.classList.toggle("active", onSettings);
+    if (onSettings) settingsBtn.setAttribute("aria-current", "page");
+    else settingsBtn.removeAttribute("aria-current");
+  }
 }
 
 export function setRailTab(tab) {

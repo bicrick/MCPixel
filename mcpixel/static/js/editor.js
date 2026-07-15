@@ -54,6 +54,28 @@ export function drawCanvas() {
   ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
 }
 
+function fitEditorScale() {
+  const wrap = $("pixelCanvas")?.parentElement;
+  if (!wrap || !editor.width || !editor.height) return;
+  const styles = getComputedStyle(wrap);
+  const availableWidth =
+    wrap.clientWidth -
+    parseFloat(styles.paddingLeft || "0") -
+    parseFloat(styles.paddingRight || "0");
+  const availableHeight =
+    wrap.clientHeight -
+    parseFloat(styles.paddingTop || "0") -
+    parseFloat(styles.paddingBottom || "0");
+  editor.scale = Math.max(
+    1,
+    Math.min(
+      64,
+      availableWidth / editor.width,
+      availableHeight / editor.height
+    )
+  );
+}
+
 function buildPalette() {
   const counts = new Map();
   for (let i = 0; i < editor.pixels.length; i += 4) {
@@ -112,20 +134,19 @@ export async function openEditor(refreshJob) {
   editor.pixels = new Uint8ClampedArray(data.data);
   editor.undo = [];
   editor.redo = [];
-  editor.scale = Math.max(
-    4,
-    Math.min(20, Math.floor(480 / Math.max(c.width, c.height)))
-  );
   $("editorOverlay").hidden = false;
   buildPalette();
-  drawCanvas();
+  requestAnimationFrame(() => {
+    fitEditorScale();
+    drawCanvas();
+  });
 }
 
 function paintAt(clientX, clientY) {
   const canvas = $("pixelCanvas");
   const rect = canvas.getBoundingClientRect();
-  const x = Math.floor((clientX - rect.left) / editor.scale);
-  const y = Math.floor((clientY - rect.top) / editor.scale);
+  const x = Math.floor(((clientX - rect.left) / rect.width) * editor.width);
+  const y = Math.floor(((clientY - rect.top) / rect.height) * editor.height);
   if (x < 0 || y < 0 || x >= editor.width || y >= editor.height) return;
   const i = (y * editor.width + x) * 4;
   if (editor.tool === "eyedropper") {
@@ -172,6 +193,11 @@ export async function saveEdit(onSaved) {
 
 export function bindEditorEvents() {
   let painting = false;
+  window.addEventListener("resize", () => {
+    if ($("editorOverlay").hidden || !editor.pixels) return;
+    fitEditorScale();
+    drawCanvas();
+  });
   $("pixelCanvas").addEventListener("mousedown", (e) => {
     painting = true;
     pushUndo();

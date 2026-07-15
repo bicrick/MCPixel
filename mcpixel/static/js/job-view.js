@@ -3,10 +3,19 @@ import { isDirectionBatch } from "./batch.js";
 import { hideDirectionsView, renderDirectionsView, stepStates } from "./directions-view.js";
 import { syncCreateChrome, syncCreateNav } from "./generate.js";
 import {
+  attachHeroChrome,
+  markActiveStage,
+  mountHeroForJob,
+  resolveSelectedStage,
+  scaleDetailImage,
+  scaleHeroImage,
+  stageUrl,
+  syncHeroChrome,
+} from "./preview-chrome.js";
+import {
   $,
   PIPELINE_STEPS,
   STATUS_LABELS,
-  bestUrl,
   cacheBust,
   isActive,
   jobFingerprint,
@@ -27,6 +36,7 @@ export function clearSelection(handlers) {
   state.currentJobId = null;
   state.currentBatchId = null;
   state.selectedDirection = null;
+  state.selectedStage = null;
   state.paintedJobId = null;
   state.lastJobFp = null;
   state.libraryReturn = false;
@@ -43,6 +53,7 @@ export function showCreate(handlers) {
   state.currentJobId = null;
   state.currentBatchId = null;
   state.selectedDirection = null;
+  state.selectedStage = null;
   state.paintedJobId = null;
   state.lastJobFp = null;
   state.libraryReturn = false;
@@ -94,6 +105,12 @@ export function renderJob(job, handlers, opts = {}) {
   setMainMode("job");
   syncLibraryBack();
 
+  if (force || switching) {
+    state.selectedStage = resolveSelectedStage(job, { reset: true });
+  } else {
+    state.selectedStage = resolveSelectedStage(job, { prefer: state.selectedStage });
+  }
+
   if (force) {
     syncResnapInputs(job, true);
     mountStepper(job);
@@ -114,6 +131,23 @@ export function renderJob(job, handlers, opts = {}) {
   renderQueue(handlers, { force: switching });
   renderLibrary(handlers, { force: switching });
   if (switching) renderLibraryFilters(handlers, { force: true });
+}
+
+/**
+ * Remount hero when the user picks a stage thumb.
+ * @param {string} stageName
+ */
+export function selectJobStage(stageName) {
+  const job = state.jobsById.get(state.currentJobId);
+  if (!job || !stageUrl(job, stageName)) return;
+  state.selectedStage = stageName;
+  if (state.currentBatchId) {
+    mountHeroForJob(job, $("batchHeroFrame"), scaleDetailImage);
+    markActiveStage($("batchStages"), state.selectedStage);
+    return;
+  }
+  mountHero(job);
+  markActiveStage($("stages"), state.selectedStage);
 }
 
 function mountStepper(job) {
@@ -174,6 +208,7 @@ function mountStages(job) {
   ];
   if (urls.edited) cards.push(stageCard("edited", urls.edited, bust));
   $("stages").innerHTML = cards.join("");
+  markActiveStage($("stages"), state.selectedStage);
 }
 
 function patchStages(job) {
@@ -215,52 +250,26 @@ function patchStages(job) {
       }
     }
   }
+  markActiveStage(root, state.selectedStage);
 }
 
-function frameInnerSize() {
-  const frame = $("heroFrame");
-  return Math.max(200, Math.min(frame.clientWidth, frame.clientHeight) - 32);
-}
-
-function scaleHeroImage(img) {
-  const fit = Math.min(420, Math.max(frameInnerSize(), 240));
-  const longest = Math.max(img.naturalWidth || 1, img.naturalHeight || 1);
-  const scale = Math.max(2, Math.min(16, Math.floor(fit / longest)));
-  img.style.width = `${(img.naturalWidth || 0) * scale}px`;
-  img.style.height = `${(img.naturalHeight || 0) * scale}px`;
+function chromeOpts(job, url) {
+  const urls = job.urls || {};
+  return {
+    url,
+    downloadName: `${job.id}_${state.selectedStage || "best"}.png`,
+    canEdit: Boolean(urls.snapped || urls.cutout),
+    active: isActive(job.status),
+  };
 }
 
 function mountHero(job) {
-  const frame = $("heroFrame");
-  const download = $("downloadBtn");
-  if (isActive(job.status)) {
-    frame.innerHTML = `<p class="meta hero-placeholder">Working — ${escapeHtml(STATUS_LABELS[job.status] || job.status)}…</p>`;
-    download.hidden = true;
-    return;
-  }
-  const url = bestUrl(job);
-  const bust = cacheBust(job);
-  if (url) {
-    frame.innerHTML = `<img alt="Result preview" data-url="${url}" data-bust="${bust}" />`;
-    const img = frame.querySelector("img");
-    img.onload = () => scaleHeroImage(img);
-    img.src = `${url}?t=${bust}`;
-    download.hidden = false;
-    download.href = url;
-    download.download = `${job.id}_best.png`;
-  } else if (job.status === "failed" || job.status === "cancelled") {
-    const label = job.status === "cancelled" ? "Cancelled" : "Failed";
-    frame.innerHTML = `<p class="meta hero-placeholder">${label}${job.error && job.status === "failed" ? `: ${escapeHtml(job.error)}` : ""}</p>`;
-    download.hidden = true;
-  } else {
-    frame.innerHTML = `<p class="meta hero-placeholder">Waiting for output…</p>`;
-    download.hidden = true;
-  }
+  mountHeroForJob(job, $("heroFrame"), scaleHeroImage);
 }
 
 function patchHero(job) {
   const frame = $("heroFrame");
-  const download = $("downloadBtn");
+  attachHeroChrome(frame);
   if (isActive(job.status)) {
     const text = `Working — ${STATUS_LABELS[job.status] || job.status}…`;
     const placeholder = frame.querySelector(".hero-placeholder");
@@ -268,24 +277,22 @@ function patchHero(job) {
     if (img || !placeholder || placeholder.textContent !== text) {
       frame.innerHTML = `<p class="meta hero-placeholder">${escapeHtml(text)}</p>`;
     }
-    download.hidden = true;
+    syncHeroChrome({ url: null, canEdit: false, active: true });
     return;
   }
-  const url = bestUrl(job);
+  const url = stageUrl(job, state.selectedStage);
   const bust = cacheBust(job);
   const img = frame.querySelector("img");
   if (url) {
     if (img && img.dataset.url === url && img.dataset.bust === String(bust)) {
-      download.hidden = false;
-      download.href = url;
+      syncHeroChrome(chromeOpts(job, url));
       return;
     }
     if (img && img.dataset.url === url) {
       img.dataset.bust = String(bust);
       img.onload = () => scaleHeroImage(img);
       img.src = `${url}?t=${bust}`;
-      download.hidden = false;
-      download.href = url;
+      syncHeroChrome(chromeOpts(job, url));
       return;
     }
     mountHero(job);
@@ -295,7 +302,7 @@ function patchHero(job) {
     mountHero(job);
     return;
   }
-  download.hidden = true;
+  syncHeroChrome({ url: null, canEdit: false, active: false });
 }
 
 function patchJobChrome(job) {
@@ -318,7 +325,8 @@ function patchJobChrome(job) {
   const urls = job.urls || {};
   const canEdit = Boolean(urls.snapped || urls.cutout);
   const active = isActive(job.status);
-  $("editBtn").disabled = !canEdit || active;
+  const editBtn = $("editBtn");
+  if (editBtn) editBtn.disabled = !canEdit || active;
   $("resnapBtn").disabled = !urls.cutout || active;
   const cancelBtn = $("cancelJobBtn");
   if (cancelBtn) {
@@ -333,6 +341,8 @@ function patchJobChrome(job) {
 
 function syncResnapInputs(job, force) {
   if (!force) return;
-  $("resnapK").value = job.k_colors || 16;
-  $("resnapPx").value = job.pixel_size != null ? job.pixel_size : "";
+  const k = $("resnapK");
+  const px = $("resnapPx");
+  if (k) k.value = job.k_colors || 16;
+  if (px) px.value = job.pixel_size != null ? job.pixel_size : "";
 }

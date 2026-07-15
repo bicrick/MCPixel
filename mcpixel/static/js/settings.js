@@ -1,6 +1,6 @@
 import { api } from "./api.js";
 import { confirmDialog } from "./dialogs.js";
-import { $, toast } from "./state.js";
+import { $, setMainMode, setMobileTab, toast } from "./state.js";
 
 let promptsSnapshot = null;
 
@@ -22,9 +22,11 @@ function applySettingsHints(view) {
 }
 
 export async function openSettings() {
-  const overlay = $("settingsOverlay");
-  if (!overlay) return;
-  overlay.hidden = false;
+  const viewEl = $("settingsView");
+  if (!viewEl) return;
+  setMainMode("settings");
+  setMobileTab("settings");
+  history.replaceState(null, "", "/?settings=1");
   $("settingsStatus").textContent = "";
   $("settingsOpenaiKey").value = "";
   $("settingsRemoveBgKey").value = "";
@@ -36,10 +38,9 @@ export async function openSettings() {
   }
 }
 
+/** Settings is a workspace page; only closes nested prompts. */
 export function closeSettings() {
   closePrompts();
-  const overlay = $("settingsOverlay");
-  if (overlay) overlay.hidden = true;
 }
 
 export async function saveSettings() {
@@ -247,10 +248,6 @@ export async function resetPrompts() {
 
 export function bindSettings(onSaved) {
   $("settingsBtn")?.addEventListener("click", () => openSettings());
-  $("closeSettingsBtn")?.addEventListener("click", closeSettings);
-  $("settingsOverlay")?.addEventListener("click", (e) => {
-    if (e.target === $("settingsOverlay")) closeSettings();
-  });
   $("saveSettingsBtn")?.addEventListener("click", () =>
     saveSettings()
       .then((view) => view && onSaved?.(view))
