@@ -42,6 +42,7 @@ import {
   bindPreviewChrome,
   openResnapModal,
 } from "./js/preview-chrome.js";
+import { initTheme } from "./js/theme.js";
 import {
   bindEditorEvents,
   closeEditor,
@@ -719,6 +720,7 @@ function bindUi() {
 setMainMode("empty");
 setRailTab("queue");
 document.querySelector(".app").dataset.mobileTab = "queue";
+initTheme();
 bindUi();
 loadHealth();
 Promise.all([refreshQueue(), loadProjects()])

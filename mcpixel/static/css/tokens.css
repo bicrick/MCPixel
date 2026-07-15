@@ -1,23 +1,5 @@
-/* Ink-only design tokens */
+/* Shared layout / type tokens */
 :root {
-  --bg0: #0a0a0a;
-  --bg1: #121212;
-  --bg2: #1c1c1c;
-  --ink: #ececec;
-  --muted: #9a9a9a;
-  --accent: #d6d6d6;
-  --accent-2: #e6c35c;
-  --success: #5cb87a;
-  --status-queued: #8a9bb0;
-  --status-generating: #e6c35c;
-  --status-cutout: #5aa8a0;
-  --status-snapping: #d49a4a;
-  --status-done: #5cb87a;
-  --status-failed: #c45c4a;
-  --danger: #c45c4a;
-  --line: #333;
-  --cta: #e6c35c;
-  --cta-ink: #12100a;
   --radius: 0;
   --rail-width: clamp(280px, 28vw, 420px);
   --workspace-max: min(1400px, 100%);
@@ -25,9 +7,62 @@
   --topbar-h: 48px;
   --font-ui: "IBM Plex Mono", ui-monospace, monospace;
   --font-display: "Pixelify Sans", "IBM Plex Mono", monospace;
+  /* Success green — health Ready only; status-done is muted */
+  --success: #5cb87a;
+  --danger: #c45c4a;
+}
+
+/* Dark (ink) — default */
+:root,
+[data-theme="ink"] {
+  color-scheme: dark;
+  --bg0: #0a0a0a;
+  --bg1: #121212;
+  --bg2: #1c1c1c;
+  --ink: #ececec;
+  --muted: #9a9a9a;
+  --accent: #d6d6d6;
+  --accent-2: #e6c35c;
+  --status-queued: #9a9a9a;
+  --status-generating: #e6c35c;
+  --status-cutout: #e6c35c;
+  --status-snapping: #e6c35c;
+  --status-done: #9a9a9a;
+  --status-failed: #c45c4a;
+  --line: #333;
+  --cta: #e6c35c;
+  --cta-ink: #12100a;
+  --checker-bg: #1a1a1a;
   --checker:
     linear-gradient(45deg, #2a2a2a 25%, transparent 25%),
     linear-gradient(-45deg, #2a2a2a 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, #2a2a2a 75%),
     linear-gradient(-45deg, transparent 75%, #2a2a2a 75%);
+}
+
+/* Light */
+[data-theme="light"] {
+  color-scheme: light;
+  --bg0: #f2f2f2;
+  --bg1: #e8e8e8;
+  --bg2: #ffffff;
+  --ink: #1a1a1a;
+  --muted: #6a6a6a;
+  --accent: #3a3a3a;
+  --accent-2: #c9a227;
+  --status-queued: #6a6a6a;
+  --status-generating: #c9a227;
+  --status-cutout: #c9a227;
+  --status-snapping: #c9a227;
+  --status-done: #6a6a6a;
+  --status-failed: #c45c4a;
+  --line: #cbcbcb;
+  --cta: #c9a227;
+  --cta-ink: #1a1408;
+  --checker-bg: #ececec;
+  --checker:
+    linear-gradient(45deg, #d8d8d8 25%, transparent 25%),
+    linear-gradient(-45deg, #d8d8d8 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #d8d8d8 75%),
+    linear-gradient(-45deg, transparent 75%, #d8d8d8 75%);
 }

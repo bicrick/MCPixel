@@ -4,6 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MCPixel</title>
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("mcpixel-theme");
+        if (t === "ink" || t === "light") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
   <link rel="icon" href="/static/favicon.ico" sizes="any" />
   <link rel="icon" type="image/png" href="/static/favicon-64.png" sizes="64x64" />
   <link rel="icon" type="image/png" href="/static/favicon-48.png" sizes="48x48" />
@@ -26,6 +34,10 @@
         <span class="topbar-tag">Local pixel suite</span>
       </div>
       <div class="topbar-right">
+        <div class="theme-toggle" id="themeToggle" role="group" aria-label="Theme">
+          <button type="button" class="theme-toggle-btn" data-theme-set="ink" aria-pressed="true">Ink</button>
+          <button type="button" class="theme-toggle-btn" data-theme-set="light" aria-pressed="false">Light</button>
+        </div>
         <div class="topbar-health" id="healthBar" aria-live="polite">
           <span class="health-dot" id="healthDot" data-state="unknown"></span>
           <span id="healthLabel">Checking…</span>
